@@ -10,7 +10,7 @@ use brutos_util::iter::unfold;
 use brutos_util::uint::UInt;
 
 use super::MAX_ORDER;
-use super::{Allocator, Page, Region, RegionPages, State};
+use super::{Allocator, Page, Region, State};
 
 #[derive(Debug)]
 pub enum Error<MapperErr> {
@@ -63,12 +63,7 @@ impl<'a> Allocator<'a> {
 
             for (i, range) in spec.clone().into_iter().enumerate() {
                 unsafe {
-                    regions.add(i).write(Region {
-                        range,
-                        pages: RegionPages {
-                            raw: core::ptr::null_mut(),
-                        },
-                    });
+                    regions.add(i).write(Region { range, pages: &[] });
                 }
             }
             unsafe {
@@ -90,7 +85,7 @@ impl<'a> Allocator<'a> {
                 .ok_or(Error::NotEnoughMemory)?;
             let pages = mapper(pages, pages_size, align_of::<Page<'a>>()).map_err(Error::Mapper)?;
             let pages = pages as *mut Page<'a>;
-            regions[i].pages.raw = pages;
+            regions[i].pages = unsafe { core::slice::from_raw_parts(pages, 0) };
         }
 
         // Initialize `Page`s
@@ -99,13 +94,13 @@ impl<'a> Allocator<'a> {
             let range =
                 region.range.start.align_up(PAGE_SIZE)..region.range.end.align_down(PAGE_SIZE);
             if range.start >= range.end {
-                region.pages.slice = &[];
+                region.pages = &[];
                 continue;
             }
             region.range = range;
             free_memory += region.range.end.0 - region.range.start.0;
 
-            let pages = unsafe { region.pages.raw };
+            let pages = region.pages as *const [Page] as *mut Page;
             for (tree_start_page, tree_order) in trees(region.range.clone()) {
                 for page_i_in_tree in 0..(1 << tree_order) {
                     let page_i = tree_start_page + page_i_in_tree;
@@ -134,8 +129,7 @@ impl<'a> Allocator<'a> {
             }
 
             let pages_len = (region.range.end.0 - region.range.start.0) / PAGE_SIZE;
-            region.pages.slice =
-                unsafe { core::slice::from_raw_parts(region.pages.raw, pages_len) };
+            region.pages = unsafe { core::slice::from_raw_parts(pages, pages_len) };
         }
 
         unsafe {

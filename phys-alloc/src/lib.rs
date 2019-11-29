@@ -31,26 +31,14 @@ pub struct Allocator<'a> {
 #[derive(Debug)]
 struct Region<'a> {
     range: Range<PhysAddr>,
-    pages: RegionPages<'a>,
-}
-
-union RegionPages<'a> {
-    slice: &'a [Page<'a>],
-    raw: *mut Page<'a>,
-}
-
-impl<'a> core::fmt::Debug for RegionPages<'a> {
-    fn fmt(&self, f: &mut core::fmt::Formatter) -> core::fmt::Result {
-        write!(f, "RegionPages")
-    }
+    pages: &'a [Page<'a>],
 }
 
 impl<'a> Region<'a> {
-    // Unsafety: `self.pages.slice` must be set
-    unsafe fn page_at_addr(&self, addr: PhysAddr) -> &'a Page<'a> {
+    fn page_at_addr(&self, addr: PhysAddr) -> &'a Page<'a> {
         // Subtraction can be eliminated by offsetting the pointer stored in `Region`
         // at the cost of the introduction either two comparisons or more unsafety
-        &self.pages.slice[(addr.0 - self.range.start.0) / PAGE_SIZE]
+        &self.pages[(addr.0 - self.range.start.0) / PAGE_SIZE]
     }
 }
 
@@ -111,7 +99,7 @@ impl<'a> Allocator<'a> {
         };
         for partial_order in requested_order..full_order {
             let buddy = PhysAddr(page.addr.0 | ((1 << partial_order) * PAGE_SIZE));
-            let buddy = unsafe { self.regions[page.region].page_at_addr(buddy) };
+            let buddy = self.regions[page.region].page_at_addr(buddy);
             buddy.state.set(State::Free(partial_order));
             self.as_mut()
                 .index_free_pages(partial_order)
@@ -140,7 +128,7 @@ impl<'a> Allocator<'a> {
         }
         let region = self.find_region(addr)?;
         let (initial_order, tree_order) = {
-            let page = unsafe { region.page_at_addr(addr) };
+            let page = region.page_at_addr(addr);
             match page.state.get() {
                 State::Allocated(page_order) => (page_order, page.tree_order),
                 _ => return Err(Error::NotAllocated),
@@ -153,7 +141,7 @@ impl<'a> Allocator<'a> {
                 return Ok(());
             }
             let buddy_addr = PhysAddr(addr.0 ^ ((1 << order) * PAGE_SIZE));
-            let buddy = unsafe { region.page_at_addr(buddy_addr) };
+            let buddy = region.page_at_addr(buddy_addr);
             match buddy.state.get() {
                 State::Free(buddy_order) if buddy_order == order => {
                     buddy.state.set(State::Unreachable);
@@ -175,7 +163,7 @@ impl<'a> Allocator<'a> {
     }
 
     fn add_to_free_pages(self: Pin<&mut Self>, region: &'a Region<'a>, addr: PhysAddr, order: u8) {
-        let page = unsafe { region.page_at_addr(addr) };
+        let page = region.page_at_addr(addr);
         page.state.set(State::Free(order));
         self.index_free_pages(order).push_front(page);
     }
@@ -501,9 +489,7 @@ mod tests {
             .iter()
             .map(|range| Region {
                 range: PhysAddr(range.start * PAGE_SIZE)..PhysAddr(range.end * PAGE_SIZE),
-                pages: RegionPages {
-                    slice: &pages[range.start..range.end],
-                },
+                pages: &pages[range.start..range.end],
             })
             .collect();
         let (regions_ptr, regions_len, regions_cap) = Vec::into_raw_parts(regions);
@@ -536,9 +522,8 @@ mod tests {
     fn compare_allocators(a: &TestAllocator, b: &TestAllocator) -> bool {
         assert_eq!(a.regions.len(), b.regions.len());
         for (region_i, (ar, br)) in a.regions.iter().zip(b.regions).enumerate() {
-            let (ar_pages, br_pages) = unsafe { (ar.pages.slice, br.pages.slice) };
-            assert_eq!(ar_pages.len(), br_pages.len());
-            for (page_i, (ap, bp)) in ar_pages.iter().zip(br_pages).enumerate() {
+            assert_eq!(ar.pages.len(), br.pages.len());
+            for (page_i, (ap, bp)) in ar.pages.iter().zip(br.pages).enumerate() {
                 let page_addr = ar.range.start.add(page_i * PAGE_SIZE);
                 assert_eq!((ap.region, ap.addr), (region_i, page_addr));
                 assert_eq!(
