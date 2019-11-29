@@ -42,7 +42,7 @@ impl<'a> Region<'a> {
     }
 }
 
-brutos_util::selector!(PageSel<'a>: &'a Page<'a>.node);
+brutos_util::selector!(PageSel<'a>: &'a Page<'a> => node);
 #[derive(Debug)]
 struct Page<'a> {
     region: usize,

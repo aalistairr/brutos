@@ -52,10 +52,10 @@ macro_rules! selector_ {
     (@parse3 $sel:tt ($pointer_kind:tt $pointer_extra:tt) # $struct_name:ident < $lt:lifetime $($rest:tt)*) => {
         $crate::selector_!(@parse4 $sel ($pointer_kind $pointer_extra $struct_name ($lt)) # $($rest)*);
     };
-    (@parse4 $sel:tt (struct $pointer_name:ident $struct_name:ident ($($struct_lt:tt)+)) # >> . $node_field:ident) => {
+    (@parse4 $sel:tt (struct $pointer_name:ident $struct_name:ident ($($struct_lt:tt)+)) # >> => $node_field:ident) => {
         $crate::selector_!(@emit $sel $pointer_name<$struct_name<$($struct_lt)*>>, $struct_name.$node_field);
     };
-    (@parse4 $sel:tt (& ($($pointer_info:tt)*) $struct_name:ident ($($struct_lt:tt)+)) # > . $node_field:ident) => {
+    (@parse4 $sel:tt (& ($($pointer_info:tt)*) $struct_name:ident ($($struct_lt:tt)+)) # > => $node_field:ident) => {
         $crate::selector_!(@emit $sel &$($pointer_info)* $struct_name<$($struct_lt)*>, $struct_name.$node_field);
     };
 
@@ -63,10 +63,10 @@ macro_rules! selector_ {
     (@parse3 $sel:tt ($pointer_kind:tt $pointer_extra:tt) # $struct_name:ident $($rest:tt)*) => {
         $crate::selector_!(@parse4 $sel ($pointer_kind $pointer_extra $struct_name ()) # $($rest)*);
     };
-    (@parse4 $sel:tt (struct $pointer_name:ident $struct_name:ident ($($struct_lt:tt)*)) # > . $node_field:ident) => {
+    (@parse4 $sel:tt (struct $pointer_name:ident $struct_name:ident ($($struct_lt:tt)*)) # > => $node_field:ident) => {
         $crate::selector_!(@emit $sel $pointer_name<$struct_name<$($struct_lt)*>>, $struct_name.$node_field);
     };
-    (@parse4 $sel:tt (& ($($pointer_info:tt)*) $struct_name:ident ($($struct_lt:tt)*)) # . $node_field:ident) => {
+    (@parse4 $sel:tt (& ($($pointer_info:tt)*) $struct_name:ident ($($struct_lt:tt)*)) # => $node_field:ident) => {
         $crate::selector_!(@emit $sel &$($pointer_info)* $struct_name<$($struct_lt)*>, $struct_name.$node_field);
     };
 
