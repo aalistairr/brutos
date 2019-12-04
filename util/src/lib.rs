@@ -3,6 +3,7 @@
 
 pub mod iter;
 pub mod linked_list;
+#[doc(hidden)]
 pub mod macros;
 pub mod pointer;
 pub mod uint;

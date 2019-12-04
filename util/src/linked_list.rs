@@ -9,12 +9,35 @@ use core::sync::atomic::{AtomicBool, Ordering};
 
 use crate::pointer::{NonMovable, Pointer, Raw};
 
+/// Interaction between a [`LinkedList`](LinkedList) and its elements.
+///
+/// Use the [`selector!`](selector!) macro to generate a type that implements `Selector`.
 pub unsafe trait Selector: Sized {
-    type Ptr: Pointer;
+    type Ptr: Pointer<Raw = Self::Raw, NonMovable = Self::Pinned, Target = Self::Target>;
+    type Raw: Raw;
+    type Pinned: NonMovable<Ptr = Self::Ptr, Target = <Self::Ptr as Deref>::Target>;
+    type Target;
 
     fn node_offset() -> usize;
 }
 
+/// Generates a type that implements `Selector` for use with [`LinkedList`](crate::linked_list::LinkedList).
+///
+/// # Examples
+/// ```
+/// pub struct Foo {
+///     node: Node<FooSel>,
+/// }
+/// brutos_util::selector!(pub FooSel: Box<Foo> => node);
+/// ```
+///
+/// References can also be used:
+/// ```
+/// struct Bar<'a> {
+///     node: Node<BarSel<'a>>,
+/// }
+/// selector!(BarSel<'a>: &'a Bar<'a> => node);
+/// ```
 #[macro_export]
 macro_rules! selector {
     ($($x:tt)*) => {
@@ -22,6 +45,7 @@ macro_rules! selector {
     };
 }
 
+#[doc(hidden)]
 #[macro_export]
 macro_rules! selector_ {
     (@parse0 # pub $($rest:tt)*) => {
@@ -76,6 +100,9 @@ macro_rules! selector_ {
 
         unsafe impl<$($selector_lt)?> $crate::linked_list::Selector for $selector_name<$($selector_lt)?> {
             type Ptr = $pointer_ty;
+            type Raw = <$pointer_ty as $crate::pointer::Pointer>::Raw;
+            type Pinned = <$pointer_ty as $crate::pointer::Pointer>::NonMovable;
+            type Target = <$pointer_ty as core::ops::Deref>::Target;
 
             fn node_offset() -> usize {
                 $crate::offset_of!($struct_name, $node_field)
@@ -179,7 +206,7 @@ impl<S: Selector> Node<S> {
     }
 }
 
-fn value_into_node_ptr<S: Selector>(value: <S::Ptr as Pointer>::NonMovable) -> *const Node<S> {
+fn value_into_node_ptr<S: Selector>(value: S::Pinned) -> *const Node<S> {
     unsafe {
         let value_ptr = <_>::into_pointer(value);
         let value_ptr = <_>::into_raw(value_ptr);
@@ -187,17 +214,12 @@ fn value_into_node_ptr<S: Selector>(value: <S::Ptr as Pointer>::NonMovable) -> *
     }
 }
 
-unsafe fn value_ptr_into_node_ptr<S: Selector>(
-    value_ptr: <S::Ptr as Pointer>::Raw,
-) -> *const Node<S> {
+unsafe fn value_ptr_into_node_ptr<S: Selector>(value_ptr: S::Raw) -> *const Node<S> {
     value_ptr.cast_to::<u8>().add(S::node_offset()) as *const Node<S>
 }
 
-unsafe fn value_from_node_ptr<S: Selector>(
-    node_ptr: *const Node<S>,
-) -> <S::Ptr as Pointer>::NonMovable {
-    let value_ptr =
-        node_ptr.cast_to::<u8>().sub(S::node_offset()) as *const <S::Ptr as Pointer>::Raw;
+unsafe fn value_from_node_ptr<S: Selector>(node_ptr: *const Node<S>) -> S::Pinned {
+    let value_ptr = node_ptr.cast_to::<u8>().sub(S::node_offset()) as *const S::Raw;
     let value_ptr = S::Ptr::from_raw(Raw::raw_from(value_ptr));
     <_>::from_pointer(value_ptr)
 }
@@ -210,6 +232,38 @@ unsafe fn node_ptr_into_link_ptr<S: Selector>(node_ptr: *const Node<S>) -> NonNu
     (&mut *(&*node_ptr).link.get()).into()
 }
 
+/// An intrusive linked list type.
+///
+/// Use the [`selector!`](selector!) macro to generate a type that implements
+/// the `Selector` trait which specifies how elements are accessed.
+///
+/// # Examples
+/// ```
+/// use std::pin::Pin;
+/// use brutos_util::linked_list::{LinkedList, Node};
+///
+/// struct Foo {
+///     n: u32,
+///     node: Node<FooSel>,
+/// }
+/// brutos_util::selector!(FooSel: Box<Foo> => node);
+///
+/// impl Foo {
+///     fn new(n: u32) -> Pin<Box<Foo>> {
+///         Box::pin(Foo { n, node: Node::new() })
+///     }
+/// }
+///
+/// let mut list = Box::pin(LinkedList::<FooSel>::new());
+/// list.as_mut().initialize();
+///
+/// list.as_mut().push_back(Foo::new(0));
+/// list.as_mut().push_back(Foo::new(1));
+///
+/// for foo in &*list {
+///     println!("{}", foo.n);
+/// }
+/// ```
 pub struct LinkedList<S: Selector> {
     anchor: UnsafeCell<Link>,
     _marker: PhantomData<S>,
@@ -271,16 +325,16 @@ impl CursorInner {
         self.try_move(unsafe { self.link.as_ref().next_nonnull() })
     }
 
-    fn get<S: Selector>(&self) -> &<S::Ptr as Deref>::Target {
+    fn get<S: Selector>(&self) -> &S::Target {
         unsafe {
             let node_ptr = node_ptr_from_link_ptr::<S>(self.link);
             let value = ManuallyDrop::new(value_from_node_ptr(node_ptr));
-            let target_ptr = &**value as *const <S::Ptr as Deref>::Target;
+            let target_ptr = &**value as *const S::Target;
             &*target_ptr
         }
     }
 
-    fn get_mut<S: Selector>(&mut self) -> Pin<&mut <S::Ptr as Deref>::Target>
+    fn get_mut<S: Selector>(&mut self) -> Pin<&mut S::Target>
     where
         S::Ptr: DerefMut,
     {
@@ -303,7 +357,7 @@ impl<'a, S: Selector> Clone for Cursor<'a, S> {
 }
 
 impl<'a, S: Selector> Deref for Cursor<'a, S> {
-    type Target = <S::Ptr as Deref>::Target;
+    type Target = S::Target;
 
     fn deref(&self) -> &Self::Target {
         self.inner.get::<S>()
@@ -332,7 +386,7 @@ impl<'a, S: Selector> Cursor<'a, S> {
 }
 
 impl<'a, S: Selector> Deref for CursorMut<'a, S> {
-    type Target = <S::Ptr as Deref>::Target;
+    type Target = S::Target;
 
     fn deref(&self) -> &Self::Target {
         self.inner.get::<S>()
@@ -343,7 +397,7 @@ impl<'a, S: Selector> CursorMut<'a, S>
 where
     S::Ptr: DerefMut,
 {
-    pub fn get_mut(&mut self) -> Pin<&mut <S::Ptr as Deref>::Target> {
+    pub fn get_mut(&mut self) -> Pin<&mut S::Target> {
         self.inner.get_mut::<S>()
     }
 }
@@ -368,7 +422,7 @@ impl<'a, S: Selector> CursorMut<'a, S> {
             .map_err(CursorMut::from_inner)
     }
 
-    pub fn unlink(self) -> <S::Ptr as Pointer>::NonMovable {
+    pub fn unlink(self) -> S::Pinned {
         unsafe {
             let node_ptr = node_ptr_from_link_ptr::<S>(self.inner.link);
             (*node_ptr).unlink();
@@ -376,13 +430,13 @@ impl<'a, S: Selector> CursorMut<'a, S> {
         }
     }
 
-    pub fn insert_before(&mut self, value: <S::Ptr as Pointer>::NonMovable) {
+    pub fn insert_before(&mut self, value: S::Pinned) {
         unsafe {
             (*value_into_node_ptr::<S>(value)).insert_before(self.inner.link);
         }
     }
 
-    pub fn insert_after(&mut self, value: <S::Ptr as Pointer>::NonMovable) {
+    pub fn insert_after(&mut self, value: S::Pinned) {
         unsafe {
             (*value_into_node_ptr::<S>(value)).insert_after(self.inner.link);
         }
@@ -394,17 +448,14 @@ impl<S: Selector> LinkedList<S> {
         unsafe { (&mut *self.anchor.get()).into() }
     }
 
-    pub unsafe fn cursor_from_raw(&self, ptr: <S::Ptr as Pointer>::Raw) -> Cursor<S> {
+    pub unsafe fn cursor_from_raw(&self, ptr: S::Raw) -> Cursor<S> {
         Cursor::from_inner(CursorInner {
             anchor: self.anchor_nonnull(),
             link: node_ptr_into_link_ptr::<S>(value_ptr_into_node_ptr(ptr)),
         })
     }
 
-    pub unsafe fn cursor_from_raw_mut(
-        self: Pin<&mut Self>,
-        ptr: <S::Ptr as Pointer>::Raw,
-    ) -> CursorMut<S> {
+    pub unsafe fn cursor_from_raw_mut(self: Pin<&mut Self>, ptr: S::Raw) -> CursorMut<S> {
         CursorMut::from_inner(CursorInner {
             anchor: self.anchor_nonnull(),
             link: node_ptr_into_link_ptr::<S>(value_ptr_into_node_ptr(ptr)),
@@ -467,23 +518,23 @@ impl<S: Selector> LinkedList<S> {
         })
     }
 
-    pub fn push_front(self: Pin<&mut Self>, value: <S::Ptr as Pointer>::NonMovable) {
+    pub fn push_front(self: Pin<&mut Self>, value: S::Pinned) {
         unsafe {
             (*value_into_node_ptr::<S>(value)).insert_after(self.anchor_nonnull());
         }
     }
 
-    pub fn push_back(self: Pin<&mut Self>, value: <S::Ptr as Pointer>::NonMovable) {
+    pub fn push_back(self: Pin<&mut Self>, value: S::Pinned) {
         unsafe {
             (*value_into_node_ptr::<S>(value)).insert_before(self.anchor_nonnull());
         }
     }
 
-    pub fn pop_front(self: Pin<&mut Self>) -> Option<<S::Ptr as Pointer>::NonMovable> {
+    pub fn pop_front(self: Pin<&mut Self>) -> Option<S::Pinned> {
         self.first_mut().map(CursorMut::unlink)
     }
 
-    pub fn pop_back(self: Pin<&mut Self>) -> Option<<S::Ptr as Pointer>::NonMovable> {
+    pub fn pop_back(self: Pin<&mut Self>) -> Option<S::Pinned> {
         self.last_mut().map(CursorMut::unlink)
     }
 }
@@ -491,7 +542,7 @@ impl<S: Selector> LinkedList<S> {
 pub struct Iter<'a, S: Selector>(Option<Cursor<'a, S>>);
 
 impl<'a, S: Selector> Iterator for Iter<'a, S> {
-    type Item = &'a <S::Ptr as Deref>::Target;
+    type Item = &'a S::Target;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.take().map(|cursor| {
@@ -508,7 +559,7 @@ impl<'a, S: Selector> Iterator for IterMut<'a, S>
 where
     S::Ptr: DerefMut,
 {
-    type Item = Pin<&'a mut <S::Ptr as Deref>::Target>;
+    type Item = Pin<&'a mut S::Target>;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.0.take().map(|mut cursor| {
@@ -521,7 +572,7 @@ where
 
 impl<'a, S: Selector> IntoIterator for &'a LinkedList<S> {
     type IntoIter = Iter<'a, S>;
-    type Item = &'a <S::Ptr as Deref>::Target;
+    type Item = &'a S::Target;
 
     fn into_iter(self) -> Iter<'a, S> {
         Iter(self.first())
@@ -533,7 +584,7 @@ where
     S::Ptr: DerefMut,
 {
     type IntoIter = IterMut<'a, S>;
-    type Item = Pin<&'a mut <S::Ptr as Deref>::Target>;
+    type Item = Pin<&'a mut S::Target>;
 
     fn into_iter(self) -> IterMut<'a, S> {
         IterMut(self.first_mut())
@@ -557,7 +608,7 @@ where
 
 impl<S: Selector> fmt::Debug for LinkedList<S>
 where
-    <S::Ptr as Deref>::Target: fmt::Debug,
+    S::Target: fmt::Debug,
 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_list().entries(self).finish()
