@@ -24,8 +24,12 @@ pub trait UInt:
     fn leading_zeros(self) -> u32;
     fn trailing_zeros(self) -> u32;
 
+    fn mask_range(r: Range<u32>) -> Self {
+        ((Self::ONE << (r.end - r.start)) - Self::ONE) << r.start
+    }
+
     fn mask(len: u32) -> Self {
-        (Self::ONE << len) - Self::ONE
+        Self::mask_range(0..len)
     }
 
     fn bits(self, r: Range<u32>) -> Self {

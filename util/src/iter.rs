@@ -1,4 +1,6 @@
 use core::marker::PhantomData;
+use core::mem;
+use core::ops::{Range, RangeInclusive};
 
 pub fn unfold_opt<T, U, F, R>(seed: Option<T>, f: F) -> Unfold<T, U, F, R>
 where
@@ -65,5 +67,102 @@ where
             self.seed = x_1;
             y
         })
+    }
+}
+
+pub trait RangeIterable: PartialOrd {
+    fn up(&self) -> Self;
+    fn down(&self) -> Self;
+}
+
+pub struct RangeIter<T> {
+    range: Range<T>,
+}
+
+impl<T: RangeIterable> Iterator for RangeIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        if self.range.start < self.range.end {
+            let next_start = self.range.start.up();
+            Some(mem::replace(&mut self.range.start, next_start))
+        } else {
+            None
+        }
+    }
+}
+
+impl<T: RangeIterable> DoubleEndedIterator for RangeIter<T> {
+    fn next_back(&mut self) -> Option<T> {
+        if self.range.start < self.range.end {
+            let next_end = self.range.end.down();
+            Some(mem::replace(&mut self.range.end, next_end))
+        } else {
+            None
+        }
+    }
+}
+
+pub struct RangeInclusiveIter<T> {
+    range: Option<RangeInclusive<T>>,
+}
+
+impl<T: RangeIterable> Iterator for RangeInclusiveIter<T> {
+    type Item = T;
+
+    fn next(&mut self) -> Option<T> {
+        self.range
+            .take()
+            .map(RangeInclusive::into_inner)
+            .and_then(|(start, end)| {
+                if start < end {
+                    self.range = Some(start.up()..=end);
+                    Some(start)
+                } else if start == end {
+                    Some(start)
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+impl<T: RangeIterable> DoubleEndedIterator for RangeInclusiveIter<T> {
+    fn next_back(&mut self) -> Option<T> {
+        self.range
+            .take()
+            .map(RangeInclusive::into_inner)
+            .and_then(|(start, end)| {
+                if start < end {
+                    self.range = Some(start..=end.down());
+                    Some(end)
+                } else if start == end {
+                    Some(end)
+                } else {
+                    None
+                }
+            })
+    }
+}
+
+pub trait RangeExt<T> {
+    type Iter: Iterator<Item = T>;
+
+    fn iter(self) -> Self::Iter;
+}
+
+impl<T: RangeIterable> RangeExt<T> for Range<T> {
+    type Iter = RangeIter<T>;
+
+    fn iter(self) -> RangeIter<T> {
+        RangeIter { range: self }
+    }
+}
+
+impl<T: RangeIterable> RangeExt<T> for RangeInclusive<T> {
+    type Iter = RangeInclusiveIter<T>;
+
+    fn iter(self) -> RangeInclusiveIter<T> {
+        RangeInclusiveIter { range: Some(self) }
     }
 }
