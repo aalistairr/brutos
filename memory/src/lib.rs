@@ -1,3 +1,5 @@
+use core::ops::{Add, Sub};
+
 use brutos_util::uint::UInt;
 
 pub mod arch;
@@ -11,15 +13,31 @@ impl core::fmt::Debug for PhysAddr {
     }
 }
 
+impl Add<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn add(self, other: usize) -> PhysAddr {
+        PhysAddr(self.0 + other)
+    }
+}
+
+impl Sub<usize> for PhysAddr {
+    type Output = PhysAddr;
+
+    fn sub(self, other: usize) -> PhysAddr {
+        PhysAddr(self.0 - other)
+    }
+}
+
+impl Sub<PhysAddr> for PhysAddr {
+    type Output = usize;
+
+    fn sub(self, other: PhysAddr) -> usize {
+        self.0 - other.0
+    }
+}
+
 impl PhysAddr {
-    pub const fn add(self, n: usize) -> PhysAddr {
-        PhysAddr(self.0 + n)
-    }
-
-    pub const fn sub(self, n: usize) -> PhysAddr {
-        PhysAddr(self.0 - n)
-    }
-
     pub fn is_aligned(self, align: usize) -> bool {
         self.0.is_aligned(align)
     }

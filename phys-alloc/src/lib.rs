@@ -524,7 +524,7 @@ mod tests {
         for (region_i, (ar, br)) in a.regions.iter().zip(b.regions).enumerate() {
             assert_eq!(ar.pages.len(), br.pages.len());
             for (page_i, (ap, bp)) in ar.pages.iter().zip(br.pages).enumerate() {
-                let page_addr = ar.range.start.add(page_i * PAGE_SIZE);
+                let page_addr = ar.range.start + (page_i * PAGE_SIZE);
                 assert_eq!((ap.region, ap.addr), (region_i, page_addr));
                 assert_eq!(
                     (ap.region, ap.addr, ap.tree_order),

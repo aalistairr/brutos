@@ -104,7 +104,7 @@ impl<'a> Allocator<'a> {
             for (tree_start_page, tree_order) in trees(region.range.clone()) {
                 for page_i_in_tree in 0..(1 << tree_order) {
                     let page_i = tree_start_page + page_i_in_tree;
-                    let page_addr = region.range.start.add(page_i * PAGE_SIZE);
+                    let page_addr = region.range.start + (page_i * PAGE_SIZE);
                     unsafe {
                         pages.add(page_i).write(Page {
                             region: region_i,
@@ -155,7 +155,7 @@ fn trees(r: Range<PhysAddr>) -> impl Iterator<Item = (usize, u8)> {
             ),
         ) as u8;
         let len = 1 << order;
-        Some(((r.start.add(len * PAGE_SIZE)..r.end, i + len), (i, order)))
+        Some(((r.start + (len * PAGE_SIZE)..r.end, i + len), (i, order)))
     })
 }
 
@@ -173,7 +173,7 @@ fn alloc_in_regions_iter(
                 return best_match;
             }
             let addr = range.start;
-            let range = range.start.add(size)..range.end;
+            let range = range.start + size..range.end;
             let size_left = range.end.0 - range.start.0;
             let this = (((i, range), addr), size_left);
             match best_match {
