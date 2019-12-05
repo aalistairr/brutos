@@ -24,7 +24,9 @@ pub unsafe trait Selector: Sized {
 /// Generates a type that implements `Selector` for use with [`LinkedList`](crate::linked_list::LinkedList).
 ///
 /// # Examples
-/// ```
+/// ```ignore
+/// use brutos_util::linked_list::Node;
+///
 /// pub struct Foo {
 ///     node: Node<FooSel>,
 /// }
@@ -32,11 +34,13 @@ pub unsafe trait Selector: Sized {
 /// ```
 ///
 /// References can also be used:
-/// ```
+/// ```ignore
+/// use brutos_util::linked_list::Node;
+///
 /// struct Bar<'a> {
 ///     node: Node<BarSel<'a>>,
 /// }
-/// selector!(BarSel<'a>: &'a Bar<'a> => node);
+/// brutos_util::selector!(BarSel<'a>: &'a Bar<'a> => node);
 /// ```
 #[macro_export]
 macro_rules! selector {
@@ -238,7 +242,7 @@ unsafe fn node_ptr_into_link_ptr<S: Selector>(node_ptr: *const Node<S>) -> NonNu
 /// the `Selector` trait which specifies how elements are accessed.
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// use std::pin::Pin;
 /// use brutos_util::linked_list::{LinkedList, Node};
 ///
