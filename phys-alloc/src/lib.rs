@@ -1,5 +1,5 @@
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![feature(const_fn)]
+#![feature(const_fn, never_type)]
 #![cfg_attr(test, allow(incomplete_features))]
 #![cfg_attr(test, feature(const_generics, vec_into_raw_parts))]
 
