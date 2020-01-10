@@ -70,7 +70,7 @@ where
     }
 }
 
-pub trait RangeIterable: PartialOrd {
+pub trait RangeIterable: PartialOrd + Clone {
     fn up(&self) -> Self;
     fn down(&self) -> Self;
 }
@@ -95,8 +95,8 @@ impl<T: RangeIterable> Iterator for RangeIter<T> {
 impl<T: RangeIterable> DoubleEndedIterator for RangeIter<T> {
     fn next_back(&mut self) -> Option<T> {
         if self.range.start < self.range.end {
-            let next_end = self.range.end.down();
-            Some(mem::replace(&mut self.range.end, next_end))
+            self.range.end = self.range.end.down();
+            Some(self.range.end.clone())
         } else {
             None
         }
@@ -164,5 +164,53 @@ impl<T: RangeIterable> RangeExt<T> for RangeInclusive<T> {
 
     fn iter(self) -> RangeInclusiveIter<T> {
         RangeInclusiveIter { range: Some(self) }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[derive(Clone, Debug, PartialEq, PartialOrd)]
+    enum Foo {
+        A,
+        B,
+        C,
+        D,
+        E,
+    }
+
+    impl RangeIterable for Foo {
+        fn up(&self) -> Foo {
+            use self::Foo::*;
+            match self {
+                A => B,
+                B => C,
+                C => D,
+                D => E,
+                E => panic!(),
+            }
+        }
+
+        fn down(&self) -> Foo {
+            use self::Foo::*;
+            match self {
+                A => panic!(),
+                B => A,
+                C => B,
+                D => C,
+                E => D,
+            }
+        }
+    }
+
+    #[test]
+    fn range_iter() {
+        use self::Foo::*;
+        use std::iter::FromIterator;
+        assert_eq!(Vec::from_iter((A..E).iter()), vec![A, B, C, D]);
+        assert_eq!(Vec::from_iter((A..E).iter().rev()), vec![D, C, B, A]);
+        assert_eq!(Vec::from_iter((A..=E).iter()), vec![A, B, C, D, E]);
+        assert_eq!(Vec::from_iter((A..=E).iter().rev()), vec![E, D, C, B, A]);
     }
 }
