@@ -1,5 +1,5 @@
 [package]
-name = "brutos-mmu"
+name = "brutos-memory-mmu"
 version = "0.1.0"
 authors = ["Alistair Geesing <alistair.geesing@icloud.com>"]
 edition = "2018"
@@ -10,5 +10,5 @@ edition = "2018"
 std = ["brutos-util/std"]
 
 [dependencies]
-brutos-memory = { path = "../memory" }
-brutos-util = { path = "../util" }
+brutos-memory-defs = { path = "../defs" }
+brutos-util = { path = "../../util" }

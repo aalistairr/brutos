@@ -1,5 +1,5 @@
 [package]
-name = "brutos-phys-alloc"
+name = "brutos-memory-phys-alloc"
 version = "0.1.0"
 authors = ["alistair"]
 edition = "2018"
@@ -11,8 +11,8 @@ default = []
 std = ["brutos-util/std"]
 
 [dependencies]
-brutos-util = { path = "../util" }
-brutos-memory = { path = "../memory" }
+brutos-util = { path = "../../util" }
+brutos-memory-defs = { path = "../defs" }
 
 [dev-dependencies]
 rand = "0.7.2"

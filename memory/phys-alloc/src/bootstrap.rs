@@ -3,8 +3,8 @@ use core::mem::{align_of, size_of};
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_memory::arch::PAGE_SIZE;
-use brutos_memory::PhysAddr;
+use brutos_memory_defs::arch::PAGE_SIZE;
+use brutos_memory_defs::PhysAddr;
 
 use brutos_util::iter::unfold;
 use brutos_util::uint::UInt;
@@ -202,7 +202,7 @@ mod tests {
     use rand::prelude::*;
 
     use crate::Allocator;
-    use brutos_memory::PhysAddr;
+    use brutos_memory_defs::PhysAddr;
 
     #[derive(Clone)]
     struct CutRange<I> {

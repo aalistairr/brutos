@@ -7,8 +7,8 @@ use core::cell::Cell;
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_memory::arch::PAGE_SIZE;
-use brutos_memory::PhysAddr;
+use brutos_memory_defs::arch::PAGE_SIZE;
+use brutos_memory_defs::PhysAddr;
 use brutos_util::linked_list::{self, LinkedList};
 
 pub mod bootstrap;
@@ -330,7 +330,8 @@ mod tests {
         (order, output): (u8, Result<Option<usize>, Error>),
         y: ([TestRegion; N_Y0], [(u8, Vec<usize>); N_Y1]),
     ) -> bool {
-        let output = output.map(|x| x.map(|page| PhysAddr(page * brutos_memory::arch::PAGE_SIZE)));
+        let output =
+            output.map(|x| x.map(|page| PhysAddr(page * brutos_memory_defs::arch::PAGE_SIZE)));
         test_allocator(x, y, |a| a.allocate(order) == output)
     }
 
@@ -340,7 +341,7 @@ mod tests {
         (page, output): (usize, Result<(), Error>),
         y: ([TestRegion; N_Y0], [(u8, Vec<usize>); N_Y1]),
     ) -> bool {
-        let addr = PhysAddr(page * brutos_memory::arch::PAGE_SIZE);
+        let addr = PhysAddr(page * brutos_memory_defs::arch::PAGE_SIZE);
         test_allocator(x, y, |a| a.free(addr) == output)
     }
 

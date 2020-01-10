@@ -3,7 +3,7 @@ use core::fmt;
 use core::ops::Range;
 use core::ptr;
 
-use brutos_memory::{PhysAddr, VirtAddr};
+use brutos_memory_defs::{PhysAddr, VirtAddr};
 use brutos_util::uint::UInt;
 
 #[derive(Copy, Clone, PartialEq, Default)]
