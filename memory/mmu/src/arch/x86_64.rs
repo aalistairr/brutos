@@ -407,7 +407,7 @@ mod tests {
     extern crate test;
     use super::*;
 
-    use brutos_memory::arch::PAGE_SIZE;
+    use brutos_memory_defs::arch::PAGE_SIZE;
 
     #[cfg(not(miri))]
     use std::collections::HashMap;
