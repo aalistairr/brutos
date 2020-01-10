@@ -1,5 +1,5 @@
 [package]
-name = "brutos-vm-trans"
+name = "brutos-mmu"
 version = "0.1.0"
 authors = ["Alistair Geesing <alistair.geesing@icloud.com>"]
 edition = "2018"

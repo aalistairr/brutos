@@ -1,2 +1,2 @@
 [workspace]
-members = ["util", "memory", "phys-alloc", "vm-trans"]
+members = ["util", "memory", "phys-alloc", "mmu"]
