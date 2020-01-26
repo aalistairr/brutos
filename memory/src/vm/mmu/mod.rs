@@ -56,36 +56,6 @@ impl Tables {
         }
     }
 
-    // pub fn map<Cx: self::arch::Context>(
-    //     &mut self,
-    //     cx: &mut Cx,
-    //     virt_addr: VirtAddr,
-    //     phys_addr: PhysAddr,
-    //     page_size: PageSize,
-    //     alloc: bool,
-    //     flags: Flags,
-    // ) -> Result<Option<PhysAddr>, MapError> {
-    //     if alloc {
-    //         self::arch::map_entry::<Cx, true>(
-    //             cx,
-    //             &mut self.root,
-    //             page_size.level(),
-    //             virt_addr,
-    //             phys_addr,
-    //             flags,
-    //         )
-    //     } else {
-    //         self::arch::map_entry::<Cx, false>(
-    //             cx,
-    //             &mut self.root,
-    //             page_size.level(),
-    //             virt_addr,
-    //             phys_addr,
-    //             flags,
-    //         )
-    //     }
-    // }
-
     pub fn get<Cx: self::arch::Context>(
         &mut self,
         cx: &mut Cx,
