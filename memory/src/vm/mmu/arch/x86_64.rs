@@ -396,45 +396,6 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
     }
 }
 
-// pub fn map_entry<Cx: Context, const ALLOC: bool>(
-//     cx: &mut Cx,
-//     root: &mut EntryCell,
-//     lvl: Level,
-//     virt_addr: VirtAddr,
-//     phys_addr: PhysAddr,
-//     flags: Flags,
-// ) -> Result<Option<PhysAddr>, MapError> {
-//     assert!(lvl < Level::Root);
-//     assert!(virt_addr.is_aligned(entry_size(lvl)));
-
-//     let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
-//     let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
-
-//     let old_entry = entry_cell.load_nonvolatile();
-//     entry_cell.store(
-//         Entry::new()
-//             .with_present(true)
-//             .with_address(phys_addr)
-//             .with_ps(lvl > Level::Pt)
-//             .with_user_accessible(flags.user_accessible)
-//             .with_writable(flags.writable)
-//             .with_not_executable(flags.executable.not())
-//             .with_global(flags.global)
-//             .with_cache_disabled(flags.cache_disabled)
-//             .with_writethrough(flags.writethrough),
-//     );
-
-//     if !old_entry.is_present() {
-//         parent_entry_cell
-//             .unwrap()
-//             .map_nonvolatile(Entry::with_inc_population);
-//         Ok(None)
-//     } else {
-//         invlpg(virt_addr);
-//         Ok(Some(old_entry.address()))
-//     }
-// }
-
 pub fn map_entry_replace<Cx: Context, const ALLOC: bool>(
     cx: &mut Cx,
     root: &mut EntryCell,
