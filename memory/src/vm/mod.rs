@@ -1,13 +1,12 @@
 use core::ops::Range;
 use core::pin::Pin;
-use core::ptr;
 use core::sync::atomic::{AtomicUsize, Ordering};
 
 use brutos_alloc::Arc;
 use brutos_sync::condvar::Condvar;
 use brutos_sync::mutex::{Mutex, PinMutex};
 use brutos_sync::waitq;
-use brutos_util::UInt;
+use brutos_util::{Guard, UInt};
 
 use crate::{AllocPhysPage, MapPhysPage};
 use crate::{PhysAddr, VirtAddr};
@@ -140,6 +139,8 @@ pub struct PageRefCount(AtomicUsize);
 pub struct FaultConditions {
     pub was_present: bool,
     pub was_write: bool,
+    pub was_instruction_fetch: bool,
+    pub was_user_access: bool,
 }
 
 impl<Cx: Context> Space<Cx>
@@ -250,13 +251,15 @@ where
                         let (page, page_data) =
                             <Cx as AllocPhysPage>::alloc(mapping.page_size.order())
                                 .map_err(|()| GeneratePageError::OutOfMemory)?;
-                        unsafe {
-                            cx.with_mapped_page(page, mapping.page_size.order(), |ptr: *mut u8| {
-                                ptr::write_bytes(ptr, 0u8, mapping.page_size.size())
-                            })
-                            .map_err(GeneratePageError::MapPhysPage)?;
-                        }
                         page_data.as_ref().0.store(1, Ordering::Release);
+                        let page_guard = Guard::new(|| unsafe {
+                            <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
+                        });
+                        unsafe {
+                            Cx::write_bytes(page, 0u8, mapping.page_size.size())
+                                .map_err(GeneratePageError::MapPhysPage)?;
+                        }
+                        page_guard.success();
                         Ok((page, mapping.flags))
                     }
                 }
@@ -264,14 +267,21 @@ where
         }
     }
 
+    unsafe fn destroy_allocated_page(
+        mapping: Pin<&Mapping<Cx>>,
+        page: PhysAddr,
+        page_data: &Cx::PageData,
+    ) {
+        if page_data.as_ref().0.fetch_sub(1, Ordering::Release) == 1 {
+            <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
+        }
+    }
+
     unsafe fn destroy_page(mapping: Pin<&Mapping<Cx>>, _offset: usize, page: PhysAddr) {
         match mapping.src {
             Source::Raw(_) => (),
             Source::Private(Object::Anonymous) => {
-                let page_data = Cx::get_data(page).as_ref();
-                if page_data.0.fetch_sub(1, Ordering::Release) == 1 {
-                    <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
-                }
+                Self::destroy_allocated_page(mapping, page, Cx::get_data(page))
             }
         }
     }
@@ -299,37 +309,30 @@ where
         Ok(())
     }
 
-    pub fn prefill(
-        self: Pin<&Self>,
-        mapping: Pin<&Mapping<Cx>>,
-    ) -> Result<(), FillError<<Cx as MapPhysPage>::Err>> {
-        do_busy_work(mapping, || {
-            for offset in mapping.page_offsets() {
-                self.fill(mapping, offset)?;
-            }
-            Ok(())
-        })
-    }
-
     fn do_cow(
         self: Pin<&Self>,
         mapping: Pin<&Mapping<Cx>>,
         offset: usize,
     ) -> Result<(), FillError<<Cx as MapPhysPage>::Err>> {
+        assert!(mapping.is_cow());
+
         let addr = mapping.range.start + offset;
+
         let mut mmu_tables = self.mmu_tables().lock();
-        let entry = match mmu_tables.get(&mut Cx::default(), addr, mapping.page_size)? {
+
+        let ro_entry = match mmu_tables.get(&mut Cx::default(), addr, mapping.page_size)? {
             None => return Ok(()),
             Some(page) => page,
         };
-        let page = entry.address();
-        let page_data = <Cx as AllocPhysPage>::get_data(page);
-        if page_data.as_ref().0.load(Ordering::Acquire) == 1 {
+        let ro_page = ro_entry.address();
+        let ro_page_data = <Cx as AllocPhysPage>::get_data(ro_page);
+
+        if ro_page_data.as_ref().0.load(Ordering::Acquire) == 1 {
             mmu_tables
                 .map_replace(
                     &mut Cx::default(),
                     addr,
-                    page,
+                    ro_page,
                     mapping.page_size,
                     false,
                     mapping.flags,
@@ -338,56 +341,41 @@ where
                 .unwrap();
             Ok(())
         } else {
-            page_data.as_ref().0.fetch_add(1, Ordering::Release);
+            ro_page_data.as_ref().0.fetch_add(1, Ordering::Release);
             drop(mmu_tables);
-            let (new_page, new_page_data) =
-                match <Cx as AllocPhysPage>::alloc(mapping.page_size.order()) {
-                    Ok(x) => x,
-                    Err(()) => {
-                        page_data.as_ref().0.fetch_sub(1, Ordering::Release);
-                        return Err(FillError::GeneratePage(GeneratePageError::OutOfMemory));
-                    }
-                };
+
+            let ro_page_refcount_guard = Guard::new(|| {
+                ro_page_data.as_ref().0.fetch_sub(1, Ordering::Release);
+            });
+
+            let (new_page, new_page_data) = <Cx as AllocPhysPage>::alloc(mapping.page_size.order())
+                .map_err(|()| GeneratePageError::OutOfMemory)?;
+            new_page_data.as_ref().0.store(1, Ordering::Release);
+            let new_page_guard = Guard::new(|| unsafe {
+                <Cx as AllocPhysPage>::dealloc(new_page, mapping.page_size.order());
+            });
+
             unsafe {
-                let r = Cx::default()
-                    .with_mapped_page(new_page, mapping.page_size.order(), |new_page: *mut u8| {
-                        Cx::default().with_mapped_page(
-                            page,
-                            mapping.page_size.order(),
-                            |page: *mut u8| {
-                                ptr::copy(page as *const u8, new_page, mapping.page_size.size())
-                            },
-                        )
-                    })
-                    .and_then(std::convert::identity);
-                match r {
-                    Ok(()) => (),
-                    Err(e) => {
-                        page_data.as_ref().0.fetch_sub(1, Ordering::Release);
-                        return Err(FillError::GeneratePage(GeneratePageError::MapPhysPage(e)));
-                    }
-                }
+                Cx::copy(ro_page, new_page, mapping.page_size.size())
+                    .map_err(GeneratePageError::MapPhysPage)?;
             }
 
-            new_page_data.as_ref().0.store(1, Ordering::Release);
             let did_replace = self.mmu_tables().lock().compare_and_swap(
                 &mut Cx::default(),
                 addr,
                 mapping.page_size,
-                entry,
+                ro_entry,
                 new_page,
                 mapping.flags,
             )?;
-            if did_replace {
-                if page_data.as_ref().0.fetch_sub(1, Ordering::Release) == 1 {
-                    unsafe {
-                        <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
-                    }
-                }
-            } else {
-                new_page_data.as_ref().0.store(0, Ordering::Release);
-                unsafe {
-                    <Cx as AllocPhysPage>::dealloc(new_page, mapping.page_size.order());
+
+            ro_page_refcount_guard.success();
+            new_page_guard.success();
+
+            unsafe {
+                match did_replace {
+                    true => Self::destroy_allocated_page(mapping, ro_page, ro_page_data),
+                    false => Self::destroy_allocated_page(mapping, new_page, new_page_data),
                 }
             }
             Ok(())
@@ -408,24 +396,43 @@ where
         let mapping = mapping.as_ref();
         let fault_addr = fault_addr.align_down(mapping.page_size.size());
         let offset = fault_addr - mapping.range.start;
+
         do_busy_work(mapping.as_ref(), || match fault_conditions {
+            FaultConditions {
+                was_write: true, ..
+            } if !mapping.flags.writable => Err(PageFaultError::InvalidAccess),
+            FaultConditions {
+                was_instruction_fetch: true,
+                ..
+            } if !mapping.flags.executable => Err(PageFaultError::InvalidAccess),
+            FaultConditions {
+                was_user_access: true,
+                ..
+            } if !mapping.flags.user_accessible => Err(PageFaultError::InvalidAccess),
+
             FaultConditions {
                 was_present: false, ..
             } => self.fill(mapping, offset).map_err(PageFaultError::Fill),
             FaultConditions {
                 was_present: true,
                 was_write: true,
-            } if mapping.flags.writable => {
-                self.do_cow(mapping, offset).map_err(PageFaultError::Fill)
+                was_instruction_fetch: false,
+                ..
+            } => self.do_cow(mapping, offset).map_err(PageFaultError::Fill),
+
+            _ => Err(PageFaultError::InvalidAccess),
+        })
+    }
+
+    pub fn prefill(
+        self: Pin<&Self>,
+        mapping: Pin<&Mapping<Cx>>,
+    ) -> Result<(), FillError<<Cx as MapPhysPage>::Err>> {
+        do_busy_work(mapping, || {
+            for offset in mapping.page_offsets() {
+                self.fill(mapping, offset)?;
             }
-            FaultConditions {
-                was_present: true,
-                was_write: true,
-            } => Err(PageFaultError::InvalidAccess),
-            FaultConditions {
-                was_present: true,
-                was_write: false,
-            } => unreachable!(),
+            Ok(())
         })
     }
 }
@@ -461,5 +468,12 @@ where
 {
     pub fn page_offsets(&self) -> impl Iterator<Item = usize> {
         (0..self.range.end.0 - self.range.start.0).step_by(self.page_size.size())
+    }
+
+    fn is_cow(&self) -> bool {
+        match self.src {
+            Source::Private(Object::Anonymous) => true,
+            Source::Raw(_) => false,
+        }
     }
 }
