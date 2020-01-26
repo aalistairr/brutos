@@ -83,8 +83,9 @@ pub struct MappingWasDestroyed;
 
 pub enum FillError<MapPhysPageErr> {
     Map(mmu::MapError),
-    GeneratePage(GeneratePageError<MapPhysPageErr>),
     MappingWasDestroyed,
+    OutOfMemory,
+    MapPhysPage(MapPhysPageErr),
 }
 
 impl<MapPhysPageErr> From<mmu::MapError> for FillError<MapPhysPageErr> {
@@ -96,17 +97,6 @@ impl<MapPhysPageErr> From<mmu::MapError> for FillError<MapPhysPageErr> {
 impl<MapPhysPageErr> From<MappingWasDestroyed> for FillError<MapPhysPageErr> {
     fn from(MappingWasDestroyed: MappingWasDestroyed) -> FillError<MapPhysPageErr> {
         FillError::MappingWasDestroyed
-    }
-}
-
-pub enum GeneratePageError<MapPhysPageErr> {
-    OutOfMemory,
-    MapPhysPage(MapPhysPageErr),
-}
-
-impl<MapPhysPageErr> From<GeneratePageError<MapPhysPageErr>> for FillError<MapPhysPageErr> {
-    fn from(e: GeneratePageError<MapPhysPageErr>) -> FillError<MapPhysPageErr> {
-        FillError::GeneratePage(e)
     }
 }
 
@@ -231,7 +221,7 @@ where
     fn generate_page(
         mapping: Pin<&Mapping<Cx>>,
         offset: usize,
-    ) -> Result<(PhysAddr, mmu::Flags), GeneratePageError<<Cx as MapPhysPage>::Err>> {
+    ) -> Result<(PhysAddr, mmu::Flags), FillError<<Cx as MapPhysPage>::Err>> {
         let mut cx = Cx::default();
         match mapping.src {
             Source::Raw(addr) => Ok((addr + offset, mapping.flags)),
@@ -250,14 +240,14 @@ where
                     None => {
                         let (page, page_data) =
                             <Cx as AllocPhysPage>::alloc(mapping.page_size.order())
-                                .map_err(|()| GeneratePageError::OutOfMemory)?;
+                                .map_err(|()| FillError::OutOfMemory)?;
                         page_data.as_ref().0.store(1, Ordering::Release);
                         let page_guard = Guard::new(|| unsafe {
                             <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
                         });
                         unsafe {
                             Cx::write_bytes(page, 0u8, mapping.page_size.size())
-                                .map_err(GeneratePageError::MapPhysPage)?;
+                                .map_err(FillError::MapPhysPage)?;
                         }
                         page_guard.success();
                         Ok((page, mapping.flags))
@@ -349,7 +339,7 @@ where
             });
 
             let (new_page, new_page_data) = <Cx as AllocPhysPage>::alloc(mapping.page_size.order())
-                .map_err(|()| GeneratePageError::OutOfMemory)?;
+                .map_err(|()| FillError::OutOfMemory)?;
             new_page_data.as_ref().0.store(1, Ordering::Release);
             let new_page_guard = Guard::new(|| unsafe {
                 <Cx as AllocPhysPage>::dealloc(new_page, mapping.page_size.order());
@@ -357,7 +347,7 @@ where
 
             unsafe {
                 Cx::copy(ro_page, new_page, mapping.page_size.size())
-                    .map_err(GeneratePageError::MapPhysPage)?;
+                    .map_err(FillError::MapPhysPage)?;
             }
 
             let did_replace = self.mmu_tables().lock().compare_and_swap(
