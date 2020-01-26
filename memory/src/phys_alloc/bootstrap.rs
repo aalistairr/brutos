@@ -3,8 +3,8 @@ use core::mem::{align_of, size_of};
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_memory_defs::arch::PAGE_SIZE;
-use brutos_memory_defs::PhysAddr;
+use crate::arch::PAGE_SIZE;
+use crate::PhysAddr;
 
 use brutos_util::iter::unfold;
 use brutos_util::uint::UInt;
@@ -18,7 +18,7 @@ pub enum Error<MapperErr> {
     Mapper(MapperErr),
 }
 
-impl<'a> Allocator<'a> {
+impl<'a, T: Default> Allocator<'a, T> {
     pub unsafe fn bootstrap<Spec, Mapper, MapperErr>(
         self: Pin<&mut Self>,
         spec: Spec,
@@ -49,17 +49,17 @@ impl<'a> Allocator<'a> {
         // Allocate and initialize `[Region]`
         let regions = {
             let len = spec.clone().into_iter().count();
-            let size = len * size_of::<Region<'a>>();
+            let size = len * size_of::<Region<'a, T>>();
             let (storage_info, phys_addr) =
-                alloc_in_regions_iter(spec.clone().into_iter(), size, align_of::<Region<'a>>())
+                alloc_in_regions_iter(spec.clone().into_iter(), size, align_of::<Region<'a, T>>())
                     .ok_or(Error::NotEnoughMemory)?;
             let regions = mapper(
                 phys_addr,
-                len * size_of::<Region<'a>>(),
-                align_of::<Region<'a>>(),
+                len * size_of::<Region<'a, T>>(),
+                align_of::<Region<'a, T>>(),
             )
             .map_err(Error::Mapper)?;
-            let regions = regions as *mut Region<'a>;
+            let regions = regions as *mut Region<'a, T>;
 
             for (i, range) in spec.clone().into_iter().enumerate() {
                 unsafe {
@@ -80,11 +80,12 @@ impl<'a> Allocator<'a> {
             }
 
             let pages_len = (range.end.0 - range.start.0) / PAGE_SIZE;
-            let pages_size = pages_len * size_of::<Page<'a>>();
-            let pages = alloc_in_regions(regions, pages_size, align_of::<Page<'a>>())
+            let pages_size = pages_len * size_of::<Page<'a, T>>();
+            let pages = alloc_in_regions(regions, pages_size, align_of::<Page<'a, T>>())
                 .ok_or(Error::NotEnoughMemory)?;
-            let pages = mapper(pages, pages_size, align_of::<Page<'a>>()).map_err(Error::Mapper)?;
-            let pages = pages as *mut Page<'a>;
+            let pages =
+                mapper(pages, pages_size, align_of::<Page<'a, T>>()).map_err(Error::Mapper)?;
+            let pages = pages as *mut Page<'a, T>;
             regions[i].pages = unsafe { core::slice::from_raw_parts(pages, 0) };
         }
 
@@ -100,7 +101,7 @@ impl<'a> Allocator<'a> {
             region.range = range;
             free_memory += region.range.end.0 - region.range.start.0;
 
-            let pages = region.pages as *const [Page] as *mut Page;
+            let pages = region.pages as *const [Page<T>] as *mut Page<T>;
             for (tree_start_page, tree_order) in trees(region.range.clone()) {
                 for page_i_in_tree in 0..(1 << tree_order) {
                     let page_i = tree_start_page + page_i_in_tree;
@@ -117,6 +118,7 @@ impl<'a> Allocator<'a> {
                             }
                             .into(),
                             node: Default::default(),
+                            data: Default::default(),
                         });
 
                         if page_i_in_tree == 0 {
@@ -186,7 +188,7 @@ fn alloc_in_regions_iter(
     regions.enumerate().fold(None, f(size, align)).map(|x| x.0)
 }
 
-fn alloc_in_regions(regions: &mut [Region], size: usize, align: usize) -> Option<PhysAddr> {
+fn alloc_in_regions<T>(regions: &mut [Region<T>], size: usize, align: usize) -> Option<PhysAddr> {
     alloc_in_regions_iter(regions.iter().map(|x| x.range.clone()), size, align).map(
         |((region_i, region_range), addr)| {
             regions[region_i].range = region_range;
@@ -201,8 +203,7 @@ mod tests {
 
     use rand::prelude::*;
 
-    use crate::Allocator;
-    use brutos_memory_defs::PhysAddr;
+    use super::*;
 
     #[derive(Clone)]
     struct CutRange<I> {
@@ -320,11 +321,11 @@ mod tests {
         mmap
     }
 
-    fn test_mmap(mmap: &[Range<PhysAddr>]) -> Result<(), crate::Error> {
+    fn test_mmap(mmap: &[Range<PhysAddr>]) -> Result<(), super::super::NotAllocated> {
         let mmap = cut_ranges(mmap.iter().cloned());
         let mut mapper = Mapper::new(mmap.clone());
 
-        let mut allocator = Box::pin(Allocator::new());
+        let mut allocator = Box::pin(Allocator::<()>::new());
         allocator.as_mut().initialize();
         let free_memory = unsafe {
             allocator
@@ -337,7 +338,7 @@ mod tests {
         allocator.as_mut().shuffle_free_pages();
 
         let mut pages = Vec::new();
-        while let Some(addr) = allocator.as_mut().allocate(0)? {
+        while let Some((addr, &())) = allocator.as_mut().allocate(0).unwrap() {
             eprintln!("Allocated {:?}", addr);
             pages.push(addr);
         }
@@ -353,7 +354,7 @@ mod tests {
     }
 
     #[test]
-    fn test_4m() -> Result<(), crate::Error> {
+    fn test_4m() -> Result<(), super::super::NotAllocated> {
         test_mmap(&[
             PhysAddr(0x0)..PhysAddr(0x9f800),
             PhysAddr(0x100000)..PhysAddr(0x100000 + 0x1e0000),

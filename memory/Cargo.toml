@@ -1,0 +1,20 @@
+[package]
+name = "brutos-memory"
+version = "0.1.0"
+authors = ["alistair"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[features]
+default = ["std"]
+std = []
+
+[dependencies]
+brutos-alloc = { path = "../alloc" }
+brutos-sync = { path = "../sync" }
+brutos-util = { path = "../util" }
+brutos-util-macros = { path = "../util/macros" }
+
+[dev-dependencies]
+rand = "0.7.2"

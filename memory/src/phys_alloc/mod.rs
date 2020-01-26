@@ -1,14 +1,9 @@
-#![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![feature(const_fn, never_type)]
-#![cfg_attr(test, allow(incomplete_features))]
-#![cfg_attr(test, feature(const_generics, vec_into_raw_parts))]
-
 use core::cell::Cell;
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_memory_defs::arch::PAGE_SIZE;
-use brutos_memory_defs::PhysAddr;
+use crate::arch::PAGE_SIZE;
+use crate::PhysAddr;
 use brutos_util::linked_list::{self, LinkedList};
 
 pub mod bootstrap;
@@ -16,40 +11,40 @@ pub mod bootstrap;
 pub const MAX_ORDER: u8 = 18;
 const ORDER_COUNT: usize = MAX_ORDER as usize + 1;
 
-#[derive(Copy, Clone, PartialEq, Debug)]
-pub enum Error {
-    TooLarge,
-    NotAllocated,
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct TooLarge;
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub struct NotAllocated;
+
+#[derive(Debug)]
+pub struct Allocator<'a, T> {
+    regions: &'a [Region<'a, T>],
+    free_pages: [LinkedList<PageSel<'a, T>>; ORDER_COUNT],
 }
 
 #[derive(Debug)]
-pub struct Allocator<'a> {
-    regions: &'a [Region<'a>],
-    free_pages: [LinkedList<PageSel<'a>>; ORDER_COUNT],
-}
-
-#[derive(Debug)]
-struct Region<'a> {
+struct Region<'a, T> {
     range: Range<PhysAddr>,
-    pages: &'a [Page<'a>],
+    pages: &'a [Page<'a, T>],
 }
 
-impl<'a> Region<'a> {
-    fn page_at_addr(&self, addr: PhysAddr) -> &'a Page<'a> {
+impl<'a, T> Region<'a, T> {
+    fn page_at_addr(&self, addr: PhysAddr) -> &'a Page<'a, T> {
         // Subtraction can be eliminated by offsetting the pointer stored in `Region`
         // at the cost of the introduction either two comparisons or more unsafety
         &self.pages[(addr.0 - self.range.start.0) / PAGE_SIZE]
     }
 }
 
-brutos_util::selector!(PageSel<'a>: &'a Page<'a> => node);
+brutos_util_macros::selector!(PageSel<'a, T: 'a>: &'a Page<'a, T> => node);
 #[derive(Debug)]
-struct Page<'a> {
+struct Page<'a, T> {
     region: usize,
     addr: PhysAddr,
     tree_order: u8,
     state: Cell<State>,
-    node: linked_list::Node<PageSel<'a>>,
+    node: linked_list::Node<PageSel<'a, T>>,
+    data: T,
 }
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -59,9 +54,9 @@ enum State {
     Unreachable,
 }
 
-impl<'a> Allocator<'a> {
-    const NEW_LINKED_LIST: LinkedList<PageSel<'a>> = LinkedList::new();
-    pub const fn new() -> Allocator<'a> {
+impl<'a, T: 'a> Allocator<'a, T> {
+    const NEW_LINKED_LIST: LinkedList<PageSel<'a, T>> = LinkedList::new();
+    pub const fn new() -> Allocator<'a, T> {
         Allocator {
             regions: &[],
             free_pages: [Self::NEW_LINKED_LIST; ORDER_COUNT],
@@ -71,7 +66,7 @@ impl<'a> Allocator<'a> {
     fn index_free_pages<'this>(
         self: Pin<&'this mut Self>,
         index: u8,
-    ) -> Pin<&'this mut LinkedList<PageSel<'a>>> {
+    ) -> Pin<&'this mut LinkedList<PageSel<'a, T>>> {
         unsafe { self.map_unchecked_mut(|a| &mut a.free_pages[index as usize]) }
     }
 
@@ -84,9 +79,9 @@ impl<'a> Allocator<'a> {
     pub fn allocate(
         mut self: Pin<&mut Self>,
         requested_order: u8,
-    ) -> Result<Option<PhysAddr>, Error> {
+    ) -> Result<Option<(PhysAddr, &'a T)>, TooLarge> {
         if requested_order > MAX_ORDER {
-            return Err(Error::TooLarge);
+            return Err(TooLarge);
         }
         let (full_order, page) = match (requested_order..=MAX_ORDER).find_map(|o| {
             self.as_mut()
@@ -106,10 +101,10 @@ impl<'a> Allocator<'a> {
                 .push_back(buddy);
         }
         page.state.set(State::Allocated(requested_order));
-        Ok(Some(page.addr))
+        Ok(Some((page.addr, &page.data)))
     }
 
-    fn find_region(&self, addr: PhysAddr) -> Result<&'a Region<'a>, Error> {
+    fn find_region(&self, addr: PhysAddr) -> Result<&'a Region<'a, T>, NotAllocated> {
         self.regions
             .binary_search_by(|region| {
                 if region.range.contains(&addr) {
@@ -119,19 +114,19 @@ impl<'a> Allocator<'a> {
                 }
             })
             .map(|region| &self.regions[region])
-            .map_err(|_| Error::NotAllocated)
+            .map_err(|_| NotAllocated)
     }
 
-    pub fn free(mut self: Pin<&mut Self>, mut addr: PhysAddr) -> Result<(), Error> {
+    pub fn free(mut self: Pin<&mut Self>, mut addr: PhysAddr) -> Result<(), NotAllocated> {
         if !addr.is_aligned(PAGE_SIZE) {
-            return Err(Error::NotAllocated);
+            return Err(NotAllocated);
         }
         let region = self.find_region(addr)?;
         let (initial_order, tree_order) = {
             let page = region.page_at_addr(addr);
             match page.state.get() {
                 State::Allocated(page_order) => (page_order, page.tree_order),
-                _ => return Err(Error::NotAllocated),
+                _ => return Err(NotAllocated),
             }
         };
 
@@ -148,7 +143,7 @@ impl<'a> Allocator<'a> {
                     unsafe {
                         self.as_mut()
                             .index_free_pages(order)
-                            .cursor_from_raw_mut(buddy)
+                            .cursor_mut_from_raw(buddy)
                             .unlink();
                     }
                     addr.0 &= !((1 << order) * PAGE_SIZE);
@@ -162,7 +157,20 @@ impl<'a> Allocator<'a> {
         unreachable!()
     }
 
-    fn add_to_free_pages(self: Pin<&mut Self>, region: &'a Region<'a>, addr: PhysAddr, order: u8) {
+    pub fn find(&self, addr: PhysAddr) -> Result<&'a T, NotAllocated> {
+        if !addr.is_aligned(PAGE_SIZE) {
+            return Err(NotAllocated);
+        }
+        let region = self.find_region(addr)?;
+        Ok(&region.page_at_addr(addr).data)
+    }
+
+    fn add_to_free_pages(
+        self: Pin<&mut Self>,
+        region: &'a Region<'a, T>,
+        addr: PhysAddr,
+        order: u8,
+    ) {
         let page = region.page_at_addr(addr);
         page.state.set(State::Free(order));
         self.index_free_pages(order).push_front(page);
@@ -195,7 +203,6 @@ mod tests {
         use self::tree as t;
         use self::TestState::Allocated as A;
         use self::TestState::Free as F;
-        use super::Error::*;
         assert!(test_allocate(([], []), (0, Ok(None)), ([], [])));
         assert!(test_allocate(
             ([], []),
@@ -315,7 +322,7 @@ mod tests {
     >(
         x: ([TestRegion; N_X0], [(u8, Vec<usize>); N_X1]),
         y: ([TestRegion; N_Y0], [(u8, Vec<usize>); N_Y1]),
-        f: impl FnOnce(Pin<&mut Allocator>) -> bool,
+        f: impl FnOnce(Pin<&mut Allocator<()>>) -> bool,
     ) -> bool {
         let mut a = allocator(&x.0, Some(&x.1));
         if !f(a.as_mut()) {
@@ -327,21 +334,22 @@ mod tests {
     #[must_use]
     fn test_allocate<const N_X0: usize, const N_X1: usize, const N_Y0: usize, const N_Y1: usize>(
         x: ([TestRegion; N_X0], [(u8, Vec<usize>); N_X1]),
-        (order, output): (u8, Result<Option<usize>, Error>),
+        (order, output): (u8, Result<Option<usize>, TooLarge>),
         y: ([TestRegion; N_Y0], [(u8, Vec<usize>); N_Y1]),
     ) -> bool {
-        let output =
-            output.map(|x| x.map(|page| PhysAddr(page * brutos_memory_defs::arch::PAGE_SIZE)));
-        test_allocator(x, y, |a| a.allocate(order) == output)
+        let output = output.map(|x| x.map(|page| PhysAddr(page * PAGE_SIZE)));
+        test_allocator(x, y, |a| {
+            a.allocate(order).map(|x| x.map(|x| x.0)) == output
+        })
     }
 
     #[must_use]
     fn test_free<const N_X0: usize, const N_X1: usize, const N_Y0: usize, const N_Y1: usize>(
         x: ([TestRegion; N_X0], [(u8, Vec<usize>); N_X1]),
-        (page, output): (usize, Result<(), Error>),
+        (page, output): (usize, Result<(), NotAllocated>),
         y: ([TestRegion; N_Y0], [(u8, Vec<usize>); N_Y1]),
     ) -> bool {
-        let addr = PhysAddr(page * brutos_memory_defs::arch::PAGE_SIZE);
+        let addr = PhysAddr(page * PAGE_SIZE);
         test_allocator(x, y, |a| a.free(addr) == output)
     }
 
@@ -375,9 +383,9 @@ mod tests {
 
     #[derive(Debug)]
     struct TestAllocator {
-        allocator: Option<Pin<Box<Allocator<'static>>>>,
-        regions_raw: (*mut Region<'static>, usize, usize),
-        pages_raw: (*mut Page<'static>, usize, usize),
+        allocator: Option<Pin<Box<Allocator<'static, ()>>>>,
+        regions_raw: (*mut Region<'static, ()>, usize, usize),
+        pages_raw: (*mut Page<'static, ()>, usize, usize),
     }
 
     impl Drop for TestAllocator {
@@ -393,7 +401,7 @@ mod tests {
     }
 
     impl std::ops::Deref for TestAllocator {
-        type Target = Pin<Box<Allocator<'static>>>;
+        type Target = Pin<Box<Allocator<'static, ()>>>;
 
         fn deref(&self) -> &Self::Target {
             self.allocator.as_ref().unwrap()
@@ -474,6 +482,7 @@ mod tests {
                             tree_order,
                             state: state.into(),
                             node: Default::default(),
+                            data: (),
                         });
                         page_i += 1;
                     }

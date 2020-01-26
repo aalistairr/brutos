@@ -1,17 +1,27 @@
 use core::cell::UnsafeCell;
 use core::fmt;
-use core::ops::Range;
+use core::ops::{Not, Range};
 use core::ptr;
 
-use brutos_memory_defs::{PhysAddr, VirtAddr};
+use crate::arch::PAGE_SIZE;
+use crate::{PhysAddr, VirtAddr};
+use brutos_alloc::OutOfMemory;
 use brutos_util::uint::UInt;
 
-#[derive(Copy, Clone, PartialEq, Default)]
+use super::super::{Flags, MapError, PageSize, UnmapError};
+
+#[derive(Copy, Clone, PartialEq, Eq, Default)]
 pub struct Entry(usize);
 
 impl Entry {
     const IS_PRESENT: u32 = 0;
     const IS_PS: u32 = 7;
+    const IS_USER_ACCESSIBLE: u32 = 2;
+    const IS_WRITABLE: u32 = 1;
+    const IS_NOT_EXECUTABLE: u32 = 63;
+    const IS_GLOBAL: u32 = 8;
+    const IS_CACHE_DISABLED: u32 = 4;
+    const IS_WRITETHROUGH: u32 = 3;
     const ADDRESS: Range<u32> = 12..48;
     const POPULATION: Range<u32> = 52..52 + 11;
 
@@ -33,6 +43,54 @@ impl Entry {
 
     pub fn with_ps(self, ps: bool) -> Entry {
         Entry(self.0.with_bit(Self::IS_PS, ps))
+    }
+
+    pub fn is_user_accessible(&self) -> bool {
+        self.0.bit(Self::IS_USER_ACCESSIBLE)
+    }
+
+    pub fn with_user_accessible(self, user_accessible: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_USER_ACCESSIBLE, user_accessible))
+    }
+
+    pub fn is_writable(&self) -> bool {
+        self.0.bit(Self::IS_WRITABLE)
+    }
+
+    pub fn with_writable(self, writable: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_WRITABLE, writable))
+    }
+
+    pub fn is_not_executable(&self) -> bool {
+        self.0.bit(Self::IS_NOT_EXECUTABLE)
+    }
+
+    pub fn with_not_executable(self, not_executable: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_NOT_EXECUTABLE, not_executable))
+    }
+
+    pub fn is_global(&self) -> bool {
+        self.0.bit(Self::IS_GLOBAL)
+    }
+
+    pub fn with_global(self, global: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_GLOBAL, global))
+    }
+
+    pub fn is_cache_disabled(&self) -> bool {
+        self.0.bit(Self::IS_CACHE_DISABLED)
+    }
+
+    pub fn with_cache_disabled(self, cache_disabled: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_CACHE_DISABLED, cache_disabled))
+    }
+
+    pub fn is_writethrough(&self) -> bool {
+        self.0.bit(Self::IS_WRITETHROUGH)
+    }
+
+    pub fn with_writethrough(self, writethrough: bool) -> Entry {
+        Entry(self.0.with_bit(Self::IS_WRITETHROUGH, writethrough))
     }
 
     pub fn address(&self) -> PhysAddr {
@@ -63,14 +121,7 @@ impl Entry {
 
 impl fmt::Debug for Entry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(
-            f,
-            "Entry({:#018x}: pres={:?}, ps={:?}, pop={:#05x}",
-            self.0,
-            self.is_present(),
-            self.is_ps(),
-            self.population()
-        )
+        write!(f, "Entry({:#018x})", self.0)
     }
 }
 
@@ -112,6 +163,20 @@ impl EntryCell {
     }
 }
 
+impl PageSize {
+    pub fn order(&self) -> u8 {
+        match self {
+            PageSize::Normal => 0,
+            PageSize::Large => 9,
+            PageSize::Huge => 9 * 2,
+        }
+    }
+
+    pub fn size(&self) -> usize {
+        PAGE_SIZE << self.order()
+    }
+}
+
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Debug)]
 pub enum Level {
     Pt = 0,
@@ -134,13 +199,11 @@ fn table_index(lvl: Level, addr: VirtAddr) -> usize {
 }
 
 pub unsafe trait Context {
-    type AllocErr: fmt::Debug;
-
-    fn alloc_table(&mut self) -> Result<PhysAddr, Self::AllocErr>;
+    fn alloc_table(&mut self) -> Result<PhysAddr, OutOfMemory>;
     unsafe fn dealloc_table(&mut self, addr: PhysAddr);
     fn map_table(&mut self, addr: PhysAddr) -> *mut Table;
 
-    fn new_table(&mut self) -> Result<(PhysAddr, *mut Table), Self::AllocErr> {
+    fn new_table(&mut self) -> Result<(PhysAddr, *mut Table), OutOfMemory> {
         let addr = self.alloc_table()?;
         let table = self.map_table(addr);
         unsafe {
@@ -150,19 +213,7 @@ pub unsafe trait Context {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Error<AllocErr> {
-    Alloc(AllocErr),
-    NotAllocated,
-    Obstructed,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub struct Flags {
-    pub alloc: bool,
-}
-
-struct Trail<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool> {
+struct Trail<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> {
     cx: &'cx mut Cx,
     root: &'root mut EntryCell,
     pml4e: *mut EntryCell,
@@ -173,10 +224,10 @@ struct Trail<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
     skip_drop: bool,
 }
 
-impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
-    Trail<'cx, 'root, Cx, FLAGS, SKIP_DROP>
+impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
+    Trail<'cx, 'root, Cx, ALLOC, SKIP_DROP>
 {
-    fn new(cx: &'cx mut Cx, root: &'root mut EntryCell) -> Trail<'cx, 'root, Cx, FLAGS, SKIP_DROP> {
+    fn new(cx: &'cx mut Cx, root: &'root mut EntryCell) -> Trail<'cx, 'root, Cx, ALLOC, SKIP_DROP> {
         Trail {
             cx,
             root,
@@ -193,13 +244,13 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
         &mut self,
         lvl: Level,
         addr: VirtAddr,
-    ) -> Result<(&mut EntryCell, Option<&mut EntryCell>), Error<Cx::AllocErr>> {
+    ) -> Result<(&mut EntryCell, Option<&mut EntryCell>), MapError> {
         fn create_table<Cx: Context>(
             cx: &mut Cx,
             entry_cell: &mut EntryCell,
             parent_entry_cell: Option<&mut EntryCell>,
-        ) -> Result<Entry, Error<Cx::AllocErr>> {
-            let (addr, _) = cx.new_table().map_err(Error::Alloc)?;
+        ) -> Result<Entry, MapError> {
+            let (addr, _) = cx.new_table()?;
             let entry = Entry::new().with_present(true).with_address(addr);
             entry_cell.store(entry);
             if let Some(parent_entry_cell) = parent_entry_cell {
@@ -207,17 +258,17 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
             }
             Ok(entry)
         }
-        fn dig<'a, Cx: Context, const FLAGS: Flags>(
+        fn dig<'a, Cx: Context, const ALLOC: bool>(
             cx: &mut Cx,
             entry_cell: &mut EntryCell,
             parent_entry_cell: Option<&mut EntryCell>,
-        ) -> Result<&'a mut Table, Error<Cx::AllocErr>> {
+        ) -> Result<&'a mut Table, MapError> {
             let mut entry = entry_cell.load_nonvolatile();
             if !entry.is_present() {
-                if FLAGS.alloc {
+                if ALLOC {
                     entry = create_table(cx, entry_cell, parent_entry_cell)?;
                 } else {
-                    return Err(Error::NotAllocated);
+                    return Err(MapError::NotAllocated);
                 }
             }
             let table = cx.map_table(entry.address());
@@ -233,7 +284,7 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
             return Ok((self.root, None));
         }
 
-        let pml4 = dig::<_, FLAGS>(self.cx, &mut self.root, None)?;
+        let pml4 = dig::<_, ALLOC>(self.cx, &mut self.root, None)?;
         let pml4e = &mut pml4.0[table_index(Level::Pml4, addr)];
         self.pml4e = pml4e;
         self.valid_lvl = Level::Pml4;
@@ -244,7 +295,7 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
             return Ok((pml4e, Some(self.root)));
         }
 
-        let pdp = dig::<_, FLAGS>(self.cx, pml4e, Some(&mut self.root))?;
+        let pdp = dig::<_, ALLOC>(self.cx, pml4e, Some(&mut self.root))?;
         let pdpe = &mut pdp.0[table_index(Level::Pdp, addr)];
         self.pdpe = pdpe;
         self.valid_lvl = Level::Pdp;
@@ -255,7 +306,7 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
             return Ok((pdpe, Some(pml4e)));
         }
 
-        let pd = dig::<_, FLAGS>(self.cx, pdpe, Some(pml4e))?;
+        let pd = dig::<_, ALLOC>(self.cx, pdpe, Some(pml4e))?;
         let pde = &mut pd.0[table_index(Level::Pd, addr)];
         self.pde = pde;
         self.valid_lvl = Level::Pd;
@@ -266,7 +317,7 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
             return Ok((pde, Some(pdpe)));
         }
 
-        let pt = dig::<_, FLAGS>(self.cx, pde, Some(pdpe))?;
+        let pt = dig::<_, ALLOC>(self.cx, pde, Some(pdpe))?;
         let pte = &mut pt.0[table_index(Level::Pt, addr)];
         self.pte = pte;
         self.valid_lvl = Level::Pt;
@@ -281,8 +332,8 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool>
     }
 }
 
-impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool> Drop
-    for Trail<'cx, 'root, Cx, FLAGS, SKIP_DROP>
+impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
+    for Trail<'cx, 'root, Cx, ALLOC, SKIP_DROP>
 {
     fn drop(&mut self) {
         fn pop<Cx: Context>(
@@ -315,7 +366,7 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool> Drop
             false
         }
 
-        if SKIP_DROP && (!FLAGS.alloc || self.skip_drop) {
+        if SKIP_DROP && (!ALLOC || self.skip_drop) {
             return;
         }
 
@@ -345,17 +396,57 @@ impl<'cx, 'root, Cx: Context, const FLAGS: Flags, const SKIP_DROP: bool> Drop
     }
 }
 
-pub fn map_entry<Cx: Context, const FLAGS: Flags>(
+// pub fn map_entry<Cx: Context, const ALLOC: bool>(
+//     cx: &mut Cx,
+//     root: &mut EntryCell,
+//     lvl: Level,
+//     virt_addr: VirtAddr,
+//     phys_addr: PhysAddr,
+//     flags: Flags,
+// ) -> Result<Option<PhysAddr>, MapError> {
+//     assert!(lvl < Level::Root);
+//     assert!(virt_addr.is_aligned(entry_size(lvl)));
+
+//     let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
+//     let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+
+//     let old_entry = entry_cell.load_nonvolatile();
+//     entry_cell.store(
+//         Entry::new()
+//             .with_present(true)
+//             .with_address(phys_addr)
+//             .with_ps(lvl > Level::Pt)
+//             .with_user_accessible(flags.user_accessible)
+//             .with_writable(flags.writable)
+//             .with_not_executable(flags.executable.not())
+//             .with_global(flags.global)
+//             .with_cache_disabled(flags.cache_disabled)
+//             .with_writethrough(flags.writethrough),
+//     );
+
+//     if !old_entry.is_present() {
+//         parent_entry_cell
+//             .unwrap()
+//             .map_nonvolatile(Entry::with_inc_population);
+//         Ok(None)
+//     } else {
+//         invlpg(virt_addr);
+//         Ok(Some(old_entry.address()))
+//     }
+// }
+
+pub fn map_entry_replace<Cx: Context, const ALLOC: bool>(
     cx: &mut Cx,
     root: &mut EntryCell,
     lvl: Level,
     virt_addr: VirtAddr,
     phys_addr: PhysAddr,
-) -> Result<Option<PhysAddr>, Error<Cx::AllocErr>> {
+    flags: Flags,
+) -> Result<Option<PhysAddr>, MapError> {
     assert!(lvl < Level::Root);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
-    let mut trail = Trail::<_, FLAGS, true>::new(cx, root);
+    let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
     let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
 
     let old_entry = entry_cell.load_nonvolatile();
@@ -363,7 +454,13 @@ pub fn map_entry<Cx: Context, const FLAGS: Flags>(
         Entry::new()
             .with_present(true)
             .with_address(phys_addr)
-            .with_ps(lvl > Level::Pt),
+            .with_ps(lvl > Level::Pt)
+            .with_user_accessible(flags.user_accessible)
+            .with_writable(flags.writable)
+            .with_not_executable(flags.executable.not())
+            .with_global(flags.global)
+            .with_cache_disabled(flags.cache_disabled)
+            .with_writethrough(flags.writethrough),
     );
 
     if !old_entry.is_present() {
@@ -372,26 +469,73 @@ pub fn map_entry<Cx: Context, const FLAGS: Flags>(
             .map_nonvolatile(Entry::with_inc_population);
         Ok(None)
     } else {
+        invlpg(virt_addr);
         Ok(Some(old_entry.address()))
     }
 }
 
-pub fn unmap_entry<Cx: Context, const FLAGS: Flags>(
+pub use self::map_entry_replace as map_entry;
+
+pub fn map_entry_keep<Cx: Context, const ALLOC: bool>(
     cx: &mut Cx,
     root: &mut EntryCell,
     lvl: Level,
     virt_addr: VirtAddr,
-) -> Result<Option<PhysAddr>, Error<Cx::AllocErr>> {
+    phys_addr: PhysAddr,
+    flags: Flags,
+) -> Result<bool, MapError> {
     assert!(lvl < Level::Root);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
-    let mut trail = Trail::<_, FLAGS, false>::new(cx, root);
+    let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
     let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+
+    let old_entry = entry_cell.load_nonvolatile();
+    if old_entry.is_present() {
+        return Ok(false);
+    }
+
+    entry_cell.store(
+        Entry::new()
+            .with_present(true)
+            .with_address(phys_addr)
+            .with_ps(lvl > Level::Pt)
+            .with_user_accessible(flags.user_accessible)
+            .with_writable(flags.writable)
+            .with_not_executable(flags.executable.not())
+            .with_global(flags.global)
+            .with_cache_disabled(flags.cache_disabled)
+            .with_writethrough(flags.writethrough),
+    );
+
+    parent_entry_cell
+        .unwrap()
+        .map_nonvolatile(Entry::with_inc_population);
+    Ok(true)
+}
+
+pub fn unmap_entry<Cx: Context, const ALLOC: bool>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    lvl: Level,
+    virt_addr: VirtAddr,
+) -> Result<Option<PhysAddr>, UnmapError> {
+    assert!(lvl < Level::Root);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+
+    let mut trail = Trail::<_, ALLOC, false>::new(cx, root);
+    let (entry_cell, parent_entry_cell) =
+        trail.find_entry(lvl, virt_addr).map_err(|e| match e {
+            MapError::OutOfMemory => unreachable!(),
+            MapError::NotAllocated => UnmapError::NotAllocated,
+            MapError::Obstructed => UnmapError::Obstructed,
+        })?;
 
     let old_entry = entry_cell.load_nonvolatile();
     entry_cell.store(Entry::new());
 
     if old_entry.is_present() {
+        invlpg(virt_addr);
         parent_entry_cell
             .unwrap()
             .map_nonvolatile(Entry::with_dec_population);
@@ -401,13 +545,87 @@ pub fn unmap_entry<Cx: Context, const FLAGS: Flags>(
     }
 }
 
+pub fn get_entry<Cx: Context>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    lvl: Level,
+    virt_addr: VirtAddr,
+) -> Result<Option<Entry>, MapError> {
+    assert!(lvl < Level::Root);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+
+    let mut trail = Trail::<_, false, false>::new(cx, root);
+    let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
+    let entry = entry_cell.load_nonvolatile();
+    if entry.is_present() {
+        Ok(Some(entry))
+    } else {
+        Ok(None)
+    }
+}
+
+pub fn compare_and_swap<Cx: Context>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    virt_addr: VirtAddr,
+    lvl: Level,
+    current: Entry,
+    phys_addr: PhysAddr,
+    flags: Flags,
+) -> Result<bool, MapError> {
+    assert!(lvl < Level::Root);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+    assert!(current.is_present());
+
+    let mut trail = Trail::<_, false, true>::new(cx, root);
+    let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
+
+    let old_entry = entry_cell.load_nonvolatile();
+    if old_entry != current {
+        return Ok(false);
+    }
+
+    entry_cell.store(
+        Entry::new()
+            .with_present(true)
+            .with_address(phys_addr)
+            .with_ps(lvl > Level::Pt)
+            .with_user_accessible(flags.user_accessible)
+            .with_writable(flags.writable)
+            .with_not_executable(flags.executable.not())
+            .with_global(flags.global)
+            .with_cache_disabled(flags.cache_disabled)
+            .with_writethrough(flags.writethrough),
+    );
+
+    invlpg(virt_addr);
+    Ok(true)
+}
+
+#[cfg(not(any(test, miri, feature = "std")))]
+fn invlpg(addr: VirtAddr) {
+    unsafe {
+        asm!("invlpg ($0)" :: "r" (addr.0) :: "volatile");
+    }
+}
+#[cfg(any(test, miri, feature = "std"))]
+fn invlpg(_: VirtAddr) {}
+
+impl PageSize {
+    pub fn level(&self) -> Level {
+        match self {
+            PageSize::Normal => Level::Pt,
+            PageSize::Large => Level::Pd,
+            PageSize::Huge => Level::Pdp,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[cfg(not(miri))]
     extern crate test;
     use super::*;
-
-    use brutos_memory_defs::arch::PAGE_SIZE;
 
     #[cfg(not(miri))]
     use std::collections::HashMap;
@@ -435,10 +653,8 @@ mod tests {
     }
 
     unsafe impl Context for State {
-        type AllocErr = !;
-
         #[inline(never)]
-        fn alloc_table(&mut self) -> Result<PhysAddr, !> {
+        fn alloc_table(&mut self) -> Result<PhysAddr, OutOfMemory> {
             const EMPTY_ENTRY_CELL: EntryCell = EntryCell(UnsafeCell::new(0));
             self.tables.insert(
                 self.addr,
@@ -503,8 +719,8 @@ mod tests {
         x
     }
 
-    const ALLOC: Flags = Flags { alloc: true };
-    const NO_ALLOC: Flags = Flags { alloc: false };
+    const ALLOC: bool = true;
+    const NO_ALLOC: bool = false;
 
     const PT: Level = Level::Pt;
     const PD: Level = Level::Pd;
@@ -524,15 +740,22 @@ mod tests {
         let root = &mut root;
 
         assert_eq!(
-            map_entry::<_, NO_ALLOC>(cx, root, PT, VirtAddr(0), PhysAddr(0)),
-            Err(Error::NotAllocated)
+            map_entry::<_, NO_ALLOC>(cx, root, PT, VirtAddr(0), PhysAddr(0), Default::default()),
+            Err(MapError::NotAllocated)
         );
         assert_eq!(root.load(), Entry::new());
         assert_eq!(cx.to_hash_map(), new_hashmap());
 
         {
             assert_eq!(
-                map_entry::<_, ALLOC>(cx, root, PT, VirtAddr(0), PhysAddr(0x1234000)),
+                map_entry::<_, ALLOC>(
+                    cx,
+                    root,
+                    PT,
+                    VirtAddr(0),
+                    PhysAddr(0x1234000),
+                    Default::default()
+                ),
                 Ok(None)
             );
             assert_eq!(
@@ -582,6 +805,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x1234000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -590,7 +814,14 @@ mod tests {
 
         {
             assert_eq!(
-                map_entry::<_, NO_ALLOC>(cx, root, PT, VirtAddr(0x1000), PhysAddr(0x2345000)),
+                map_entry::<_, NO_ALLOC>(
+                    cx,
+                    root,
+                    PT,
+                    VirtAddr(0x1000),
+                    PhysAddr(0x2345000),
+                    Default::default()
+                ),
                 Ok(None)
             );
             assert_eq!(
@@ -641,12 +872,14 @@ mod tests {
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x1234000))
+                                    .with_not_executable(true)
                             ),
                             (
                                 1usize,
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x2345000))
+                                    .with_not_executable(true)
                             )
                         ])
                     )
@@ -656,7 +889,14 @@ mod tests {
 
         {
             assert_eq!(
-                map_entry::<_, ALLOC>(cx, root, PT, VirtAddr(0x200000), PhysAddr(0x3456000)),
+                map_entry::<_, ALLOC>(
+                    cx,
+                    root,
+                    PT,
+                    VirtAddr(0x200000),
+                    PhysAddr(0x3456000),
+                    Default::default()
+                ),
                 Ok(None)
             );
             assert_eq!(
@@ -716,12 +956,14 @@ mod tests {
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x1234000))
+                                    .with_not_executable(true)
                             ),
                             (
                                 1usize,
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x2345000))
+                                    .with_not_executable(true)
                             )
                         ])
                     ),
@@ -732,6 +974,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x3456000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -740,7 +983,14 @@ mod tests {
 
         {
             assert_eq!(
-                map_entry::<_, ALLOC>(cx, root, PD, VirtAddr(0x400000), PhysAddr(0x46800000)),
+                map_entry::<_, ALLOC>(
+                    cx,
+                    root,
+                    PD,
+                    VirtAddr(0x400000),
+                    PhysAddr(0x46800000),
+                    Default::default()
+                ),
                 Ok(None)
             );
             assert_eq!(
@@ -796,6 +1046,7 @@ mod tests {
                                     .with_present(true)
                                     .with_ps(true)
                                     .with_address(PhysAddr(0x46800000))
+                                    .with_not_executable(true)
                             )
                         ])
                     ),
@@ -807,12 +1058,14 @@ mod tests {
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x1234000))
+                                    .with_not_executable(true)
                             ),
                             (
                                 1usize,
                                 Entry::new()
                                     .with_present(true)
                                     .with_address(PhysAddr(0x2345000))
+                                    .with_not_executable(true)
                             )
                         ])
                     ),
@@ -823,6 +1076,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x3456000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -887,6 +1141,7 @@ mod tests {
                                     .with_present(true)
                                     .with_ps(true)
                                     .with_address(PhysAddr(0x46800000))
+                                    .with_not_executable(true)
                             )
                         ])
                     ),
@@ -897,6 +1152,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x2345000))
+                                .with_not_executable(true)
                         )])
                     ),
                     (
@@ -906,6 +1162,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x3456000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -963,6 +1220,7 @@ mod tests {
                                     .with_present(true)
                                     .with_ps(true)
                                     .with_address(PhysAddr(0x46800000))
+                                    .with_not_executable(true)
                             )
                         ])
                     ),
@@ -973,6 +1231,7 @@ mod tests {
                             Entry::new()
                                 .with_present(true)
                                 .with_address(PhysAddr(0x3456000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -1022,6 +1281,7 @@ mod tests {
                                 .with_present(true)
                                 .with_ps(true)
                                 .with_address(PhysAddr(0x46800000))
+                                .with_not_executable(true)
                         )])
                     )
                 ]))
@@ -1060,9 +1320,7 @@ mod tests {
     }
 
     unsafe impl Context for BenchState {
-        type AllocErr = !;
-
-        fn alloc_table(&mut self) -> Result<PhysAddr, !> {
+        fn alloc_table(&mut self) -> Result<PhysAddr, OutOfMemory> {
             const NEW_ENTRY_CELL: EntryCell = EntryCell::new();
             let table = Box::leak(Box::new(Table([NEW_ENTRY_CELL; 512])));
             let addr = PhysAddr((table as *mut Table as usize).wrapping_add(0xffff880000000000));
@@ -1091,7 +1349,7 @@ mod tests {
         let root = &mut root;
 
         assert_eq!(
-            map_entry::<_, ALLOC>(cx, root, PT, VirtAddr(0), PhysAddr(0),),
+            map_entry::<_, ALLOC>(cx, root, PT, VirtAddr(0), PhysAddr(0), Default::default()),
             Ok(None)
         );
 
@@ -1102,6 +1360,7 @@ mod tests {
                 PT,
                 black_box(VirtAddr(0)),
                 black_box(PhysAddr(0)),
+                Default::default(),
             )
             .unwrap();
         });
@@ -1116,7 +1375,14 @@ mod tests {
         let mut root = EntryCell::new();
 
         assert_eq!(
-            map_entry::<_, ALLOC>(&mut cx, &mut root, PT, VirtAddr(0), PhysAddr(0),),
+            map_entry::<_, ALLOC>(
+                &mut cx,
+                &mut root,
+                PT,
+                VirtAddr(0),
+                PhysAddr(0),
+                Default::default()
+            ),
             Ok(None)
         );
 

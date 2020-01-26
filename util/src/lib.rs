@@ -1,5 +1,5 @@
-#![feature(const_fn)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![feature(const_fn)]
 
 pub mod iter;
 pub mod linked_list;
@@ -7,3 +7,7 @@ pub mod linked_list;
 pub mod macros;
 pub mod pointer;
 pub mod uint;
+
+pub use self::uint::UInt;
+
+pub enum Void {}

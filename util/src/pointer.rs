@@ -1,65 +1,51 @@
-use core::ops::Deref;
+use core::ops::{Deref, DerefMut};
 use core::pin::Pin;
 #[cfg(any(test, feature = "std"))]
-use std::rc::Rc;
+use std::boxed::Box as StdBox;
 #[cfg(any(test, feature = "std"))]
-use std::sync::Arc;
+use std::rc::Rc as StdRc;
+#[cfg(any(test, feature = "std"))]
+use std::sync::Arc as StdArc;
 
-pub trait Raw {
-    fn raw_from<U>(ptr: *const U) -> Self;
-    fn raw_from_mut<U>(ptr: *mut U) -> Self;
-    fn cast_to<U>(self) -> *const U;
-    fn cast_to_mut<U>(self) -> *mut U;
+#[cfg(feature = "brutos-alloc")]
+use brutos_alloc::{
+    AllocOne, Arc as BrutosArc, ArcInner as BrutosArcInner, Box as BrutosBox,
+    Unique as BrutosUnique,
+};
+
+pub trait Raw: Copy {
+    fn from_ptr<U>(ptr: *const U) -> Self;
+    fn cast<U>(self) -> *const U;
 }
 
 impl<T> Raw for *const T {
-    fn raw_from<U>(ptr: *const U) -> *const T {
-        ptr as *const T
+    fn from_ptr<U>(ptr: *const U) -> *const T {
+        ptr as _
     }
 
-    fn raw_from_mut<U>(ptr: *mut U) -> *const T {
-        ptr as *const T
-    }
-
-    fn cast_to<U>(self) -> *const U {
-        self as *const U
-    }
-
-    fn cast_to_mut<U>(self) -> *mut U {
-        self as *mut U
+    fn cast<U>(self) -> *const U {
+        self as _
     }
 }
 
 impl<T> Raw for *mut T {
-    fn raw_from<U>(ptr: *const U) -> *mut T {
-        ptr as *mut T
+    fn from_ptr<U>(ptr: *const U) -> *mut T {
+        ptr as _
     }
 
-    fn raw_from_mut<U>(ptr: *mut U) -> *mut T {
-        ptr as *mut T
-    }
-
-    fn cast_to<U>(self) -> *const U {
-        self as *const U
-    }
-
-    fn cast_to_mut<U>(self) -> *mut U {
-        self as *mut U
+    fn cast<U>(self) -> *const U {
+        self as _
     }
 }
 
-pub unsafe trait NonMovable: Deref {
+pub unsafe trait Immovable: Sized + Deref {
     type Ptr: Pointer;
 
     unsafe fn from_pointer(ptr: Self::Ptr) -> Self;
     unsafe fn into_pointer(this: Self) -> Self::Ptr;
 }
 
-pub unsafe trait NonMovableMut: NonMovable {
-    fn as_mut(&mut self) -> Pin<&mut Self::Target>;
-}
-
-unsafe impl<'a, T> NonMovable for &'a T {
+unsafe impl<'a, T> Immovable for &'a T {
     type Ptr = &'a T;
 
     unsafe fn from_pointer(ptr: &'a T) -> &'a T {
@@ -71,7 +57,7 @@ unsafe impl<'a, T> NonMovable for &'a T {
     }
 }
 
-unsafe impl<T: Pointer> NonMovable for Pin<T> {
+unsafe impl<'a, T: Pointer> Immovable for Pin<T> {
     type Ptr = T;
 
     unsafe fn from_pointer(ptr: T) -> Pin<T> {
@@ -85,15 +71,21 @@ unsafe impl<T: Pointer> NonMovable for Pin<T> {
 
 pub unsafe trait Pointer: Sized + Deref {
     type Raw: Raw;
-    type NonMovable: NonMovable<Ptr = Self, Target = Self::Target>;
+    type Immovable: Immovable<Ptr = Self, Target = Self::Target>;
 
     unsafe fn from_raw(ptr: Self::Raw) -> Self;
-    fn into_raw(value: Self) -> Self::Raw;
+    fn into_raw(this: Self) -> Self::Raw;
+
+    unsafe fn raw_deref<'a>(ptr: Self::Raw) -> &'a Self::Target;
 }
 
-unsafe impl<'a, T: Sized> Pointer for &'a T {
+pub unsafe trait PointerMut: Pointer + DerefMut {
+    unsafe fn raw_deref_mut<'a>(ptr: Self::Raw) -> &'a mut Self::Target;
+}
+
+unsafe impl<'a, T> Pointer for &'a T {
     type Raw = *const T;
-    type NonMovable = &'a T;
+    type Immovable = &'a T;
 
     unsafe fn from_raw(ptr: *const T) -> &'a T {
         &*ptr
@@ -102,11 +94,15 @@ unsafe impl<'a, T: Sized> Pointer for &'a T {
     fn into_raw(this: &'a T) -> *const T {
         this
     }
+
+    unsafe fn raw_deref<'b>(ptr: *const T) -> &'b T {
+        &*ptr
+    }
 }
 
-unsafe impl<'a, T: Sized> Pointer for &'a mut T {
+unsafe impl<'a, T> Pointer for &'a mut T {
     type Raw = *mut T;
-    type NonMovable = Pin<&'a mut T>;
+    type Immovable = Pin<&'a mut T>;
 
     unsafe fn from_raw(ptr: *mut T) -> &'a mut T {
         &mut *ptr
@@ -115,46 +111,143 @@ unsafe impl<'a, T: Sized> Pointer for &'a mut T {
     fn into_raw(this: &'a mut T) -> *mut T {
         this
     }
+
+    unsafe fn raw_deref<'b>(ptr: *mut T) -> &'b T {
+        &*ptr
+    }
+}
+
+unsafe impl<'a, T> PointerMut for &'a mut T {
+    unsafe fn raw_deref_mut<'b>(ptr: *mut T) -> &'b mut T {
+        &mut *ptr
+    }
 }
 
 #[cfg(any(test, feature = "std"))]
-unsafe impl<T: Sized> Pointer for Box<T> {
+unsafe impl<T> Pointer for StdBox<T> {
     type Raw = *mut T;
-    type NonMovable = Pin<Box<T>>;
+    type Immovable = Pin<StdBox<T>>;
 
-    unsafe fn from_raw(ptr: *mut T) -> Box<T> {
-        Box::from_raw(ptr)
+    unsafe fn from_raw(raw: *mut T) -> StdBox<T> {
+        StdBox::from_raw(raw)
     }
 
-    fn into_raw(this: Box<T>) -> *mut T {
-        Box::into_raw(this)
-    }
-}
-
-#[cfg(any(test, feature = "std"))]
-unsafe impl<T: Sized> Pointer for Rc<T> {
-    type Raw = *const T;
-    type NonMovable = Pin<Rc<T>>;
-
-    unsafe fn from_raw(ptr: *const T) -> Rc<T> {
-        Rc::from_raw(ptr)
+    fn into_raw(this: StdBox<T>) -> *mut T {
+        StdBox::into_raw(this)
     }
 
-    fn into_raw(this: Rc<T>) -> *const T {
-        Rc::into_raw(this)
+    unsafe fn raw_deref<'a>(ptr: *mut T) -> &'a T {
+        &*ptr
     }
 }
 
 #[cfg(any(test, feature = "std"))]
-unsafe impl<T: Sized> Pointer for Arc<T> {
-    type Raw = *const T;
-    type NonMovable = Pin<Arc<T>>;
+unsafe impl<T> PointerMut for StdBox<T> {
+    unsafe fn raw_deref_mut<'a>(ptr: *mut T) -> &'a mut T {
+        &mut *ptr
+    }
+}
 
-    unsafe fn from_raw(ptr: *const T) -> Arc<T> {
-        Arc::from_raw(ptr)
+#[cfg(any(test, feature = "std"))]
+unsafe impl<T> Pointer for StdRc<T> {
+    type Raw = *const T;
+    type Immovable = Pin<StdRc<T>>;
+
+    unsafe fn from_raw(ptr: *const T) -> StdRc<T> {
+        StdRc::from_raw(ptr)
     }
 
-    fn into_raw(this: Arc<T>) -> *const T {
-        Arc::into_raw(this)
+    fn into_raw(this: StdRc<T>) -> *const T {
+        StdRc::into_raw(this)
+    }
+
+    unsafe fn raw_deref<'a>(ptr: *const T) -> &'a T {
+        &*ptr
+    }
+}
+
+#[cfg(any(test, feature = "std"))]
+unsafe impl<T> Pointer for StdArc<T> {
+    type Raw = *const T;
+    type Immovable = Pin<StdArc<T>>;
+
+    unsafe fn from_raw(ptr: *const T) -> StdArc<T> {
+        StdArc::from_raw(ptr)
+    }
+
+    fn into_raw(this: StdArc<T>) -> *const T {
+        StdArc::into_raw(this)
+    }
+
+    unsafe fn raw_deref<'a>(ptr: *const T) -> &'a T {
+        &*ptr
+    }
+}
+
+#[cfg(feature = "brutos-alloc")]
+unsafe impl<T, A: Default + AllocOne<T>> Pointer for BrutosBox<T, A> {
+    type Raw = *mut T;
+    type Immovable = Pin<BrutosBox<T, A>>;
+
+    unsafe fn from_raw(raw: *mut T) -> BrutosBox<T, A> {
+        BrutosBox::from_raw(raw)
+    }
+
+    fn into_raw(this: BrutosBox<T, A>) -> *mut T {
+        BrutosBox::into_raw(this)
+    }
+
+    unsafe fn raw_deref<'a>(ptr: *mut T) -> &'a T {
+        &*ptr
+    }
+}
+
+#[cfg(feature = "brutos-alloc")]
+unsafe impl<T, A: Default + AllocOne<T>> PointerMut for BrutosBox<T, A> {
+    unsafe fn raw_deref_mut<'a>(ptr: *mut T) -> &'a mut T {
+        &mut *ptr
+    }
+}
+
+#[cfg(feature = "brutos-alloc")]
+unsafe impl<T, A: Default + AllocOne<BrutosArcInner<T>>> Pointer for BrutosArc<T, A> {
+    type Raw = *const T;
+    type Immovable = Pin<BrutosArc<T, A>>;
+
+    unsafe fn from_raw(ptr: *const T) -> BrutosArc<T, A> {
+        BrutosArc::from_raw(ptr)
+    }
+
+    fn into_raw(this: BrutosArc<T, A>) -> *const T {
+        BrutosArc::into_raw(this)
+    }
+
+    unsafe fn raw_deref<'a>(ptr: *const T) -> &'a T {
+        &*ptr
+    }
+}
+
+#[cfg(feature = "brutos-alloc")]
+unsafe impl<T> Pointer for BrutosUnique<T> {
+    type Raw = *mut T;
+    type Immovable = Pin<BrutosUnique<T>>;
+
+    unsafe fn from_raw(ptr: *mut T) -> BrutosUnique<T> {
+        BrutosUnique::from_raw(ptr)
+    }
+
+    fn into_raw(this: BrutosUnique<T>) -> *mut T {
+        BrutosUnique::into_raw(this)
+    }
+
+    unsafe fn raw_deref<'a>(ptr: *mut T) -> &'a T {
+        &*ptr
+    }
+}
+
+#[cfg(feature = "brutos-alloc")]
+unsafe impl<T> PointerMut for BrutosUnique<T> {
+    unsafe fn raw_deref_mut<'a>(ptr: *mut T) -> &'a mut T {
+        &mut *ptr
     }
 }

@@ -23,6 +23,7 @@ pub trait UInt:
 
     fn leading_zeros(self) -> u32;
     fn trailing_zeros(self) -> u32;
+    fn checked_add(self, other: Self) -> Option<Self>;
 
     fn mask_range(r: Range<u32>) -> Self {
         ((Self::ONE << (r.end - r.start)) - Self::ONE) << r.start
@@ -90,6 +91,14 @@ pub trait UInt:
         assert!(align > Self::ZERO);
         self - (self % align)
     }
+
+    fn checked_align_up(self, align: Self) -> Option<Self> {
+        assert!(align > Self::ZERO);
+        match self % align {
+            remainder if remainder == Self::ZERO => Some(self),
+            remainder => self.checked_add(align - remainder),
+        }
+    }
 }
 
 macro_rules! impl_uint {
@@ -98,14 +107,21 @@ macro_rules! impl_uint {
             const ZERO: Self = 0;
             const ONE: Self = 1;
 
+            #[inline(always)]
             fn leading_zeros(self) -> u32 {
                 self.leading_zeros()
             }
 
+            #[inline(always)]
             fn trailing_zeros(self) -> u32 {
                 self.trailing_zeros()
+            }
+
+            #[inline(always)]
+            fn checked_add(self, other: Self) -> Option<Self> {
+                self.checked_add(other)
             }
         }
     )*}
 }
-impl_uint!(u8, u16, u32, u64, usize);
+impl_uint!(u8, u16, u32, u64, u128, usize);
