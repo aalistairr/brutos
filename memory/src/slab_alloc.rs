@@ -8,8 +8,8 @@ use brutos_util::linked_list::{LinkedList, Node};
 use brutos_util::UInt;
 use brutos_util::Void;
 
-use crate::arch::PAGE_SIZE;
-use crate::AllocMappedPage;
+// use crate::arch::PAGE_SIZE;
+use crate::{AllocMappedPage, Order};
 
 type Mask = u128;
 const MASK_LEN: usize = 2;
@@ -32,7 +32,7 @@ impl<Cx: AllocMappedPage> Allocator<Cx> {
         }
     }
 
-    pub const fn new<T>(order: u8) -> Allocator<Cx> {
+    pub const fn new<T>(order: Order) -> Allocator<Cx> {
         Allocator {
             info: Info::new::<T>(order),
             slabs: LinkedList::new(),
@@ -120,16 +120,16 @@ impl<Cx: AllocMappedPage> Drop for Allocator<Cx> {
 #[derive(Copy, Clone)]
 struct Info {
     entry_size: usize,
-    order: u8,
+    order: Order,
     cap: usize,
     initial_mask: [Mask; MASK_LEN],
 }
 
 impl Info {
-    const fn new<T>(order: u8) -> Info {
+    const fn new<T>(order: Order) -> Info {
         let entry_layout = Layout::new::<T>();
-        assert!((PAGE_SIZE << order) >= entry_layout.align());
-        let slab_size = (PAGE_SIZE << order) - mem::size_of::<Slab>();
+        assert!(order.size() >= entry_layout.align());
+        let slab_size = order.size() - mem::size_of::<Slab>();
         assert!(slab_size % mem::align_of::<Slab>() == 0);
         let cap = slab_size / entry_layout.size();
         let cap = if cap < MAX_SLAB_CAP {
@@ -163,7 +163,7 @@ impl Info {
     }
 
     fn state_offset(&self) -> usize {
-        (PAGE_SIZE << self.order) - mem::size_of::<Slab>()
+        self.order.size() - mem::size_of::<Slab>()
     }
 }
 
@@ -270,23 +270,22 @@ mod tests {
     struct Context;
 
     impl Context {
-        fn layout(order: u8) -> std::alloc::Layout {
-            let size = PAGE_SIZE << order;
-            std::alloc::Layout::from_size_align(size, size).unwrap()
+        fn layout(order: Order) -> std::alloc::Layout {
+            std::alloc::Layout::from_size_align(order.size(), order.size()).unwrap()
         }
     }
 
     unsafe impl AllocMappedPage for Context {
-        const MAX_ORDER: u8 = 255;
+        const MAX_ORDER: Order = Order(255);
 
-        fn alloc(order: u8) -> Result<NonNull<u8>, ()> {
+        fn alloc(order: Order) -> Result<NonNull<u8>, ()> {
             unsafe {
                 let layout = Self::layout(order);
                 Ok(NonNull::new_unchecked(std::alloc::alloc(layout)))
             }
         }
 
-        unsafe fn dealloc(ptr: NonNull<u8>, order: u8) {
+        unsafe fn dealloc(ptr: NonNull<u8>, order: Order) {
             std::alloc::dealloc(ptr.as_ptr(), Self::layout(order));
         }
     }
@@ -301,7 +300,7 @@ mod tests {
     #[test]
     fn slab() {
         type Ty = [usize; 4];
-        let mut a = black_box(Box::pin(Allocator::<Context>::new::<Ty>(0)));
+        let mut a = black_box(Box::pin(Allocator::<Context>::new::<Ty>(Order(0))));
         a.as_mut().initialize();
 
         let cap = a.info.cap;

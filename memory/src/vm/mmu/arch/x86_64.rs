@@ -3,8 +3,7 @@ use core::fmt;
 use core::ops::{Not, Range};
 use core::ptr;
 
-use crate::arch::PAGE_SIZE;
-use crate::{PhysAddr, VirtAddr};
+use crate::{Order, PhysAddr, VirtAddr};
 use brutos_alloc::OutOfMemory;
 use brutos_util::uint::UInt;
 
@@ -164,16 +163,12 @@ impl EntryCell {
 }
 
 impl PageSize {
-    pub fn order(&self) -> u8 {
+    pub fn order(&self) -> Order {
         match self {
-            PageSize::Normal => 0,
-            PageSize::Large => 9,
-            PageSize::Huge => 9 * 2,
+            PageSize::Normal => Order(0),
+            PageSize::Large => Order(9),
+            PageSize::Huge => Order(9 * 2),
         }
-    }
-
-    pub fn size(&self) -> usize {
-        PAGE_SIZE << self.order()
     }
 }
 
@@ -622,7 +617,7 @@ mod tests {
                 Box::leak(Box::new(Table([EMPTY_ENTRY_CELL; 512]))),
             );
             let addr = self.addr;
-            self.addr = self.addr + PAGE_SIZE;
+            self.addr = self.addr + crate::arch::PAGE_SIZE;
             Ok(addr)
         }
 

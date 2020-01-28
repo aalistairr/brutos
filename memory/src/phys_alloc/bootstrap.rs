@@ -205,6 +205,8 @@ mod tests {
 
     use super::*;
 
+    use crate::Order;
+
     #[derive(Clone)]
     struct CutRange<I> {
         cut: Range<PhysAddr>,
@@ -338,7 +340,7 @@ mod tests {
         allocator.as_mut().shuffle_free_pages();
 
         let mut pages = Vec::new();
-        while let Some((addr, &())) = allocator.as_mut().allocate(0).unwrap() {
+        while let Some((addr, &())) = allocator.as_mut().allocate(Order(0)).unwrap() {
             eprintln!("Allocated {:?}", addr);
             pages.push(addr);
         }

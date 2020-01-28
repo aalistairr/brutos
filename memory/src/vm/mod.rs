@@ -9,7 +9,7 @@ use brutos_sync::waitq;
 use brutos_util::{Guard, UInt};
 
 use crate::{AllocPhysPage, MapPhysPage};
-use crate::{PhysAddr, VirtAddr};
+use crate::{Order, PhysAddr, VirtAddr};
 
 pub mod mappings;
 pub mod mmu;
@@ -31,7 +31,7 @@ pub trait Context:
 where
     Self::PageData: AsRef<PageRefCount>,
 {
-    fn shared_empty_page(&mut self, order: u8) -> Option<(PhysAddr, &Self::PageData)>;
+    fn shared_empty_page(&mut self, order: Order) -> Option<(PhysAddr, &Self::PageData)>;
 }
 
 pub struct Space<Cx: Context>
@@ -164,10 +164,10 @@ where
         page_size: mmu::PageSize,
         flags: mmu::Flags,
     ) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, MapError> {
-        assert!(size.is_aligned(page_size.size()));
+        assert!(size.is_aligned(page_size.order().size()));
         match at {
-            Location::Aligned(align) => assert!(align.is_aligned(page_size.size())),
-            Location::Fixed(addr) => assert!(addr.is_aligned(page_size.size())),
+            Location::Aligned(align) => assert!(align.is_aligned(page_size.order().size())),
+            Location::Fixed(addr) => assert!(addr.is_aligned(page_size.order().size())),
         }
         Ok(self
             .mappings()
@@ -246,7 +246,7 @@ where
                             <Cx as AllocPhysPage>::dealloc(page, mapping.page_size.order());
                         });
                         unsafe {
-                            Cx::write_bytes(page, 0u8, mapping.page_size.size())
+                            Cx::write_bytes(page, 0u8, mapping.page_size.order())
                                 .map_err(FillError::MapPhysPage)?;
                         }
                         page_guard.success();
@@ -346,7 +346,7 @@ where
             });
 
             unsafe {
-                Cx::copy(ro_page, new_page, mapping.page_size.size())
+                Cx::copy(ro_page, new_page, mapping.page_size.order())
                     .map_err(FillError::MapPhysPage)?;
             }
 
@@ -384,7 +384,7 @@ where
             .ok_or(PageFaultError::InvalidAccess)?
             .clone();
         let mapping = mapping.as_ref();
-        let fault_addr = fault_addr.align_down(mapping.page_size.size());
+        let fault_addr = fault_addr.align_down(mapping.page_size.order().size());
         let offset = fault_addr - mapping.range.start;
 
         do_busy_work(mapping.as_ref(), || match fault_conditions {
@@ -457,7 +457,7 @@ where
     Cx::PageData: AsRef<PageRefCount>,
 {
     pub fn page_offsets(&self) -> impl Iterator<Item = usize> {
-        (0..self.range.end.0 - self.range.start.0).step_by(self.page_size.size())
+        (0..self.range.end.0 - self.range.start.0).step_by(self.page_size.order().size())
     }
 
     fn is_cow(&self) -> bool {

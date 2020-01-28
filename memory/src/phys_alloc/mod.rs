@@ -3,7 +3,7 @@ use core::ops::Range;
 use core::pin::Pin;
 
 use crate::arch::PAGE_SIZE;
-use crate::PhysAddr;
+use crate::{Order, PhysAddr};
 use brutos_util::linked_list::{self, LinkedList};
 
 pub mod bootstrap;
@@ -78,8 +78,9 @@ impl<'a, T: 'a> Allocator<'a, T> {
 
     pub fn allocate(
         mut self: Pin<&mut Self>,
-        requested_order: u8,
+        requested_order: Order,
     ) -> Result<Option<(PhysAddr, &'a T)>, TooLarge> {
+        let requested_order = requested_order.0;
         if requested_order > MAX_ORDER {
             return Err(TooLarge);
         }
@@ -339,7 +340,7 @@ mod tests {
     ) -> bool {
         let output = output.map(|x| x.map(|page| PhysAddr(page * PAGE_SIZE)));
         test_allocator(x, y, |a| {
-            a.allocate(order).map(|x| x.map(|x| x.0)) == output
+            a.allocate(Order(order)).map(|x| x.map(|x| x.0)) == output
         })
     }
 

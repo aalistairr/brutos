@@ -112,3 +112,12 @@ impl VirtAddr {
         self.0.checked_align_up(align).map(VirtAddr)
     }
 }
+
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+pub struct Order(pub u8);
+
+impl Order {
+    pub const fn size(&self) -> usize {
+        crate::arch::PAGE_SIZE << self.0
+    }
+}
