@@ -3,6 +3,7 @@ members = [
     "alloc",
     "memory",
     "sync",
+    "task",
     "util",
     "util/macros",
 ]
