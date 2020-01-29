@@ -4,6 +4,7 @@ use core::ops::{Add, Sub};
 use brutos_util::UInt;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
 pub struct PhysAddr(pub usize);
 
 impl fmt::Debug for PhysAddr {
@@ -59,6 +60,7 @@ impl PhysAddr {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[repr(transparent)]
 pub struct VirtAddr(pub usize);
 
 impl fmt::Debug for VirtAddr {
@@ -114,6 +116,7 @@ impl VirtAddr {
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
+#[repr(transparent)]
 pub struct Order(pub u8);
 
 impl Order {
