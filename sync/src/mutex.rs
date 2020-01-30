@@ -13,8 +13,11 @@ pub struct Mutex<T, Cx: waitq::Context> {
     data: UnsafeCell<T>,
 }
 
+unsafe impl<T: Send, Cx: Send + waitq::Context> Send for Mutex<T, Cx> {}
+unsafe impl<T: Send, Cx: Send + waitq::Context> Sync for Mutex<T, Cx> {}
+
 impl<T, Cx: waitq::Context> Mutex<T, Cx> {
-    pub fn new(data: T) -> Mutex<T, Cx> {
+    pub const fn new(data: T) -> Mutex<T, Cx> {
         Mutex {
             is_locked: AtomicBool::new(false),
             waitq: PinSpinlock::new(LinkedList::new()),
@@ -92,12 +95,16 @@ impl<'a, T, Cx: waitq::Context> core::ops::DerefMut for MutexGuard<'a, T, Cx> {
 pub struct PinMutex<T, Cx: waitq::Context>(Mutex<T, Cx>);
 
 impl<T, Cx: waitq::Context> PinMutex<T, Cx> {
-    pub fn new(data: T) -> PinMutex<T, Cx> {
+    pub const fn new(data: T) -> PinMutex<T, Cx> {
         PinMutex(Mutex::new(data))
     }
 
     fn mutex(self: Pin<&Self>) -> Pin<&Mutex<T, Cx>> {
         unsafe { self.map_unchecked(|x| &x.0) }
+    }
+
+    pub fn initialize(self: Pin<&Self>) {
+        self.mutex().initialize();
     }
 
     pub fn try_lock(self: Pin<&Self>) -> Option<Pin<MutexGuard<T, Cx>>> {

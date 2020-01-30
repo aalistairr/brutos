@@ -1,7 +1,9 @@
 [workspace]
 members = [
     "alloc",
+    "kernel",
     "memory",
+    "multiboot2",
     "sync",
     "task",
     "util",

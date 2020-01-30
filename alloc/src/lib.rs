@@ -28,6 +28,7 @@ pub unsafe trait AllocOne<T> {
     unsafe fn dealloc(&mut self, ptr: NonNull<T>);
 }
 
+#[cfg(any(test, feature = "std"))]
 unsafe impl<T, A: core::alloc::Alloc> AllocOne<T> for A {
     unsafe fn alloc(&mut self) -> Result<NonNull<T>, OutOfMemory> {
         self.alloc(Layout::new::<T>())

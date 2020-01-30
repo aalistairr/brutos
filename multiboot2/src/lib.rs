@@ -1,9 +1,11 @@
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+
 use core::mem;
 use core::ops::Range;
 use core::slice;
 use core::str;
 
-use brutos_memory_defs::PhysAddr;
+use brutos_memory::PhysAddr;
 
 pub mod ffi;
 
@@ -18,6 +20,7 @@ pub enum Tag<'a> {
     MemoryMap(Mmap<'a>),
 }
 
+#[derive(Copy, Clone)]
 pub struct Mmap<'a> {
     len: usize,
     entry_size: usize,
@@ -27,10 +30,12 @@ pub struct Mmap<'a> {
 #[derive(Copy, Clone)]
 pub struct TagIter<'a>(&'a [u8]);
 
-pub fn tags(boot_info: &ffi::BootInfo) -> TagIter {
-    let ptr = boot_info.tags.as_ptr();
-    let len = boot_info.size as usize - mem::size_of::<ffi::BootInfo>();
-    unsafe { TagIter(slice::from_raw_parts(ptr, len)) }
+impl ffi::BootInfo {
+    pub fn tags(&self) -> TagIter {
+        let ptr = self.tags.as_ptr();
+        let len = self.size as usize - mem::size_of::<ffi::BootInfo>();
+        unsafe { TagIter(slice::from_raw_parts(ptr, len)) }
+    }
 }
 
 fn read_bytes<'a>(bytes: &mut &'a [u8], len: usize) -> &'a [u8] {
@@ -61,7 +66,10 @@ impl<'a> Iterator for TagIter<'a> {
         }
 
         let header = unsafe { read_value::<ffi::TagHeader>(&mut self.0) };
-        let mut body = read_bytes(&mut self.0, header.size as usize);
+        let mut body = read_bytes(
+            &mut self.0,
+            header.size as usize - mem::size_of::<ffi::TagHeader>(),
+        );
         self.0 = &self.0[self
             .0
             .as_ptr()
@@ -97,6 +105,7 @@ pub struct MmapEntry {
     pub ty: MmapEntryTy,
 }
 
+#[derive(PartialEq, Eq)]
 pub enum MmapEntryTy {
     Unknown,
     Available,
@@ -127,7 +136,7 @@ impl<'a> Mmap<'a> {
         }
     }
 
-    pub fn iter<'this>(&'this self) -> impl 'this + Iterator<Item = MmapEntry> {
+    pub fn iter<'this>(&'this self) -> impl 'this + Clone + Iterator<Item = MmapEntry> {
         (0..self.len).map(move |i| self.get(i))
     }
 }

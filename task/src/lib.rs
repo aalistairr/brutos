@@ -29,8 +29,11 @@ pub struct Task<Cx: Context> {
     process_node: Node<ProcessSel<Cx>>,
 }
 
-brutos_util_macros::selector!(WaitQSel<Cx: Context>: Arc<Task<Cx>, Cx> => waitq_node);
+brutos_util_macros::selector!(pub WaitQSel<Cx: Context>: Arc<Task<Cx>, Cx> => waitq_node);
 brutos_util_macros::selector!(pub ProcessSel<Cx: Context>: Arc<Task<Cx>, Cx> => process_node);
+
+unsafe impl<Cx: Send + Context> Send for Task<Cx> {}
+unsafe impl<Cx: Send + Context> Sync for Task<Cx> {}
 
 #[repr(C)]
 pub struct State<Cx: Context> {
@@ -90,5 +93,14 @@ impl<Cx: Context> State<Cx> {
     ) {
         self.task = &**task;
         self.regs.initialize(self, task, entry_point, kernel_stack);
+    }
+
+    pub fn dummy() -> State<Cx> {
+        State {
+            regs: Default::default(),
+            kernel_stack: VirtAddr(0),
+            critical_count: 0,
+            task: core::ptr::null(),
+        }
     }
 }

@@ -47,6 +47,9 @@ struct Page<'a, T> {
     data: T,
 }
 
+unsafe impl<'a, T: Send> Send for Page<'a, T> {}
+unsafe impl<'a, T: Send> Sync for Page<'a, T> {}
+
 #[derive(Copy, Clone, PartialEq, Debug)]
 enum State {
     Free(u8),

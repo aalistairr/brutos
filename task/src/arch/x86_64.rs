@@ -8,14 +8,14 @@ use crate::{Context, EntryPoint, State, Task};
 
 #[inline]
 pub unsafe fn current_task_inc_critical_count() {
-    asm!("inc %gs:0xc0" ::: "cc", "memory" : "volatile");
+    asm!("incq %gs:0xc0" ::: "cc", "memory" : "volatile");
 }
 
 /// Returns true if the decremented count is zero
 #[inline]
 pub unsafe fn current_task_dec_critical_count() -> bool {
     let is_zero: bool;
-    asm!("dec %gs:0xc0" : "=@ccz" (is_zero) :: "cc", "memory" : "volatile");
+    asm!("decq %gs:0xc0" : "={@ccz}" (is_zero) :: "cc", "memory" : "volatile");
     is_zero
 }
 
@@ -25,6 +25,13 @@ impl<Cx: Context> Task<Cx> {
         let task: *const Task<Cx>;
         asm!("mov %gs:0xc8, $0" : "=r" (task) ::::);
         task
+    }
+}
+
+impl<Cx: Context> State<Cx> {
+    pub unsafe fn activate(this: Pin<&mut Self>) {
+        let this = Pin::into_inner_unchecked(this) as *mut _;
+        asm!("wrgsbase $0" :: "r" (this) :: "volatile");
     }
 }
 
@@ -235,6 +242,7 @@ global_asm!(
     .byte 0
     .byte 0
     .byte 0
+    .global GDTR
     GDTR:
     .short GDT_end - GDT
     .quad GDT

@@ -12,6 +12,12 @@ use brutos_util::uint::UInt;
 use super::MAX_ORDER;
 use super::{Allocator, Page, Region, State};
 
+pub unsafe trait Context {
+    type Err;
+
+    fn map(&mut self, addr: PhysAddr, size: usize, align: usize) -> Result<*mut u8, Self::Err>;
+}
+
 #[derive(Debug)]
 pub enum Error<MapperErr> {
     NotEnoughMemory,
@@ -19,26 +25,26 @@ pub enum Error<MapperErr> {
 }
 
 impl<'a, T: Default> Allocator<'a, T> {
-    pub unsafe fn bootstrap<Spec, Mapper, MapperErr>(
+    pub unsafe fn bootstrap<Cx, Spec>(
         self: Pin<&mut Self>,
+        cx: &mut Cx,
         spec: Spec,
-        mapper: Mapper,
-    ) -> Result<usize, Error<MapperErr>>
+    ) -> Result<usize, Error<Cx::Err>>
     where
+        Cx: Context,
         Spec: Clone + IntoIterator<Item = Range<PhysAddr>>,
-        Mapper: FnMut(PhysAddr, usize, usize) -> Result<*mut u8, MapperErr>,
     {
-        self.bootstrap_(spec, mapper)
+        self.bootstrap_(cx, spec)
     }
 
-    fn bootstrap_<Spec, Mapper, MapperErr>(
+    fn bootstrap_<Cx, Spec>(
         mut self: Pin<&mut Self>,
+        cx: &mut Cx,
         spec: Spec,
-        mut mapper: Mapper,
-    ) -> Result<usize, Error<MapperErr>>
+    ) -> Result<usize, Error<Cx::Err>>
     where
+        Cx: Context,
         Spec: Clone + IntoIterator<Item = Range<PhysAddr>>,
-        Mapper: FnMut(PhysAddr, usize, usize) -> Result<*mut u8, MapperErr>,
     {
         spec.clone().into_iter().fold(PhysAddr(0), |prev_end, r| {
             assert!(r.start <= r.end);
@@ -53,12 +59,13 @@ impl<'a, T: Default> Allocator<'a, T> {
             let (storage_info, phys_addr) =
                 alloc_in_regions_iter(spec.clone().into_iter(), size, align_of::<Region<'a, T>>())
                     .ok_or(Error::NotEnoughMemory)?;
-            let regions = mapper(
-                phys_addr,
-                len * size_of::<Region<'a, T>>(),
-                align_of::<Region<'a, T>>(),
-            )
-            .map_err(Error::Mapper)?;
+            let regions = cx
+                .map(
+                    phys_addr,
+                    len * size_of::<Region<'a, T>>(),
+                    align_of::<Region<'a, T>>(),
+                )
+                .map_err(Error::Mapper)?;
             let regions = regions as *mut Region<'a, T>;
 
             for (i, range) in spec.clone().into_iter().enumerate() {
@@ -83,8 +90,9 @@ impl<'a, T: Default> Allocator<'a, T> {
             let pages_size = pages_len * size_of::<Page<'a, T>>();
             let pages = alloc_in_regions(regions, pages_size, align_of::<Page<'a, T>>())
                 .ok_or(Error::NotEnoughMemory)?;
-            let pages =
-                mapper(pages, pages_size, align_of::<Page<'a, T>>()).map_err(Error::Mapper)?;
+            let pages = cx
+                .map(pages, pages_size, align_of::<Page<'a, T>>())
+                .map_err(Error::Mapper)?;
             let pages = pages as *mut Page<'a, T>;
             regions[i].pages = unsafe { core::slice::from_raw_parts(pages, 0) };
         }
@@ -282,10 +290,12 @@ mod tests {
         }
     }
 
-    impl<I> Mapper<I>
+    unsafe impl<I> Context for Mapper<I>
     where
         I: Clone + Iterator<Item = Range<PhysAddr>>,
     {
+        type Err = !;
+
         fn map(&mut self, addr: PhysAddr, size: usize, align: usize) -> Result<*mut u8, !> {
             let range = addr..PhysAddr(addr.0 + size);
             for existing_range in self.memory.keys() {
@@ -329,12 +339,7 @@ mod tests {
 
         let mut allocator = Box::pin(Allocator::<()>::new());
         allocator.as_mut().initialize();
-        let free_memory = unsafe {
-            allocator
-                .as_mut()
-                .bootstrap(mmap, |addr, size, align| mapper.map(addr, size, align))
-                .unwrap()
-        };
+        let free_memory = unsafe { allocator.as_mut().bootstrap(&mut mapper, mmap).unwrap() };
         eprintln!("Available memory: {:#x}", free_memory);
 
         allocator.as_mut().shuffle_free_pages();

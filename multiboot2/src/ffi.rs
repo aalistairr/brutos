@@ -5,7 +5,7 @@ pub struct BootInfo {
     pub tags: [u8; 0],
 }
 
-#[repr(C)]
+#[repr(C, align(8))]
 pub struct TagHeader {
     pub ty: u32,
     pub size: u32,
