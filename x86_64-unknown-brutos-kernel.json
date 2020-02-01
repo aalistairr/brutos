@@ -8,7 +8,7 @@
   "linker-is-gnu": true,
   "llvm-target": "x86_64-unknown-none",
   "max-atomic-width": 64,
-  "os": "none",
+  "os": "bare",
   "pre-link-args": {
     "gcc": [
       "-Wl,--as-needed",

@@ -38,7 +38,7 @@ impl Parse for Selector {
 /// Generates a type that implements `Sel` for use with [`LinkedList`](brutos_util::linked_list::LinkedList).
 ///
 /// # Examples
-/// ```
+/// ```ignore
 /// use brutos_util::linked_list::Node;
 ///
 /// pub struct Foo {
@@ -48,7 +48,7 @@ impl Parse for Selector {
 /// ```
 ///
 /// References can also be used:
-/// ```
+/// ```ignore
 /// use brutos_util::linked_list::Node;
 ///
 /// struct Bar<'a, T> {

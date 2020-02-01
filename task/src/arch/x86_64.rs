@@ -224,6 +224,7 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
     Cx::leave_critical();
 }
 
+#[cfg(target_os = "bare")]
 global_asm!(
     "
     .section .rodata

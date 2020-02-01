@@ -135,7 +135,7 @@ slab_allocator!(
 slab_allocator!(addr_space_allocator, 1, ArcInner<AddressSpace>);
 
 pub struct AddressSpace {
-    vm: brutos_memory::vm::Space<Cx>,
+    _vm: brutos_memory::vm::Space<Cx>,
 }
 
 impl brutos_task::Context for Cx {
