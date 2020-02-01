@@ -512,27 +512,27 @@ pub fn bitfield(input: TokenStream) -> TokenStream {
                 }
             }
             _ => {
+                fn make_one_into_range(bits_index: &mut BitsIndex) {
+                    match bits_index {
+                        BitsIndex::One(bit) => {
+                            *bits_index = BitsIndex::Range(
+                                bit.clone(),
+                                parens(Expr::Binary(ExprBinary {
+                                    attrs: Vec::new(),
+                                    left: Box::new(bit.clone()),
+                                    op: BinOp::Add(Token![+](Span::call_site())),
+                                    right: Box::new(Expr::Lit(ExprLit {
+                                        attrs: Vec::new(),
+                                        lit: Lit::Int(LitInt::new("1", Span::call_site())),
+                                    })),
+                                })),
+                            )
+                        }
+                        BitsIndex::Range(_, _) => (),
+                    }
+                }
                 match field.value {
                     Value::Mapped(ref mut map) => {
-                        fn make_one_into_range(bits_index: &mut BitsIndex) {
-                            match bits_index {
-                                BitsIndex::One(bit) => {
-                                    *bits_index = BitsIndex::Range(
-                                        bit.clone(),
-                                        parens(Expr::Binary(ExprBinary {
-                                            attrs: Vec::new(),
-                                            left: Box::new(bit.clone()),
-                                            op: BinOp::Add(Token![+](Span::call_site())),
-                                            right: Box::new(Expr::Lit(ExprLit {
-                                                attrs: Vec::new(),
-                                                lit: Lit::Int(LitInt::new("1", Span::call_site())),
-                                            })),
-                                        })),
-                                    )
-                                }
-                                BitsIndex::Range(_, _) => (),
-                            }
-                        }
                         for (value, selff) in map {
                             make_one_into_range(&mut value.bits_index);
                             make_one_into_range(&mut selff.bits_index);
@@ -564,6 +564,8 @@ pub fn bitfield(input: TokenStream) -> TokenStream {
                                     }
                                 }),
                             }));
+                            let mut bits = bits.clone();
+                            make_one_into_range(&mut bits.bits_index);
                             map.push((
                                 Bits {
                                     array_index: None,
@@ -572,7 +574,7 @@ pub fn bitfield(input: TokenStream) -> TokenStream {
                                         next_end.clone(),
                                     ),
                                 },
-                                bits.clone(),
+                                bits,
                             ));
                             prev_end = next_end;
                         }

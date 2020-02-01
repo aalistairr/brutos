@@ -385,10 +385,7 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct DivideConfiguration(u32);
 
-    field divide_value_raw: usize {
-        0..2 => 0..2,
-        2 => 3,
-    }
+    field divide_value_raw: usize => 0..2 ~ 3;
 }
 
 pub enum DivideValue {
