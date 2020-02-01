@@ -251,6 +251,7 @@ struct BoolField(Field, ItemStruct);
 struct UintField(Field, ItemStruct);
 
 struct AssertInBounds(Ident, Expr, Expr);
+struct ValueIsZeroFn(Type);
 
 impl ToTokens for ArrayIndex {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
@@ -264,6 +265,33 @@ impl ToTokens for AssertInBounds {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let AssertInBounds(name, i, len) = self;
         tokens.extend(quote! { const #name: () = assert!(#i < #len); });
+    }
+}
+
+impl ToTokens for ValueIsZeroFn {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        let t = &self.0;
+        match t {
+            Type::Array(ta) => {
+                let len = &ta.len;
+                tokens.extend(quote! {
+                    const fn value_is_zero(value: #t) -> bool {
+                        let mut i = 0;
+                        while i < #len {
+                            if value[i] != 0 {
+                                return false;
+                            }
+                        }
+                        true
+                    }
+                });
+            }
+            t => tokens.extend(quote! {
+                const fn value_is_zero(value: #t) -> bool {
+                    value == 0
+                }
+            }),
+        }
     }
 }
 
@@ -397,6 +425,8 @@ impl ToTokens for UintField {
             }));
         }
 
+        let value_is_zero_fn = ValueIsZeroFn(ty.clone());
+
         tokens.extend(quote! {
             #vis const fn #getter_name(&self) -> #ty {
                 #({
@@ -423,6 +453,13 @@ impl ToTokens for UintField {
                     } else {
                         ((1 << (r.end - r.start)) - 1) << r.start
                     }
+                }
+
+                {
+                    #value_is_zero_fn
+                    let mut tmp = value;
+                    #(tmp #value_array_index &= !__value_mask(#value_bits_start..#value_bits_end);)*
+                    assert!(value_is_zero(tmp));
                 }
 
                 #(self.0 #self_array_index =
