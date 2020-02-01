@@ -6,114 +6,48 @@ use core::ptr;
 use crate::{Order, PhysAddr, VirtAddr};
 use brutos_alloc::OutOfMemory;
 use brutos_util::uint::UInt;
+use brutos_util_macros::bitfield;
 
 use super::super::{Flags, MapError, PageSize, UnmapError};
 
-#[derive(Copy, Clone, PartialEq, Eq, Default)]
-pub struct Entry(usize);
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq, Default)]
+    pub struct Entry(usize);
+
+    pub field present: bool => 0;
+    pub field ps: bool => 7;
+    pub field user_accessible: bool => 2;
+    pub field writable: bool => 1;
+    pub field not_executable: bool => 63;
+    pub field global: bool => 8;
+    pub field cache_disabled: bool => 4;
+    pub field writethrough: bool => 3;
+    field address_raw: usize { 12..48 => 12..48 }
+    pub field population: usize => 52..52 + 11;
+}
 
 impl Entry {
-    const IS_PRESENT: u32 = 0;
-    const IS_PS: u32 = 7;
-    const IS_USER_ACCESSIBLE: u32 = 2;
-    const IS_WRITABLE: u32 = 1;
-    const IS_NOT_EXECUTABLE: u32 = 63;
-    const IS_GLOBAL: u32 = 8;
-    const IS_CACHE_DISABLED: u32 = 4;
-    const IS_WRITETHROUGH: u32 = 3;
-    const ADDRESS: Range<u32> = 12..48;
-    const POPULATION: Range<u32> = 52..52 + 11;
-
-    pub fn new() -> Entry {
+    pub const fn new() -> Self {
         Entry(0)
     }
 
-    pub fn is_present(&self) -> bool {
-        self.0.bit(Self::IS_PRESENT)
+    pub const fn address(&self) -> PhysAddr {
+        PhysAddr(self.address_raw())
     }
 
-    pub fn with_present(self, present: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_PRESENT, present))
+    pub const fn set_address(&mut self, addr: PhysAddr) {
+        self.set_address_raw(addr.0)
+    }
+    pub const fn with_address(mut self, addr: PhysAddr) -> Self {
+        self.set_address(addr);
+        self
     }
 
-    pub fn is_ps(&self) -> bool {
-        self.0.bit(Self::IS_PS)
-    }
-
-    pub fn with_ps(self, ps: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_PS, ps))
-    }
-
-    pub fn is_user_accessible(&self) -> bool {
-        self.0.bit(Self::IS_USER_ACCESSIBLE)
-    }
-
-    pub fn with_user_accessible(self, user_accessible: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_USER_ACCESSIBLE, user_accessible))
-    }
-
-    pub fn is_writable(&self) -> bool {
-        self.0.bit(Self::IS_WRITABLE)
-    }
-
-    pub fn with_writable(self, writable: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_WRITABLE, writable))
-    }
-
-    pub fn is_not_executable(&self) -> bool {
-        self.0.bit(Self::IS_NOT_EXECUTABLE)
-    }
-
-    pub fn with_not_executable(self, not_executable: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_NOT_EXECUTABLE, not_executable))
-    }
-
-    pub fn is_global(&self) -> bool {
-        self.0.bit(Self::IS_GLOBAL)
-    }
-
-    pub fn with_global(self, global: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_GLOBAL, global))
-    }
-
-    pub fn is_cache_disabled(&self) -> bool {
-        self.0.bit(Self::IS_CACHE_DISABLED)
-    }
-
-    pub fn with_cache_disabled(self, cache_disabled: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_CACHE_DISABLED, cache_disabled))
-    }
-
-    pub fn is_writethrough(&self) -> bool {
-        self.0.bit(Self::IS_WRITETHROUGH)
-    }
-
-    pub fn with_writethrough(self, writethrough: bool) -> Entry {
-        Entry(self.0.with_bit(Self::IS_WRITETHROUGH, writethrough))
-    }
-
-    pub fn address(&self) -> PhysAddr {
-        PhysAddr(self.0 & usize::mask_range(Self::ADDRESS))
-    }
-
-    pub fn with_address(self, addr: PhysAddr) -> Entry {
-        assert_eq!(addr.0 & !usize::mask_range(Self::ADDRESS), 0);
-        Entry(self.0.with_bits(Self::ADDRESS, addr.0.bits(Self::ADDRESS)))
-    }
-
-    pub fn population(&self) -> usize {
-        self.0.bits(Self::POPULATION)
-    }
-
-    pub fn with_population(self, population: usize) -> Entry {
-        Entry(self.0.with_bits(Self::POPULATION, population))
-    }
-
-    pub fn with_inc_population(self) -> Entry {
+    pub fn with_inc_population(self) -> Self {
         self.with_population(self.population() + 1)
     }
 
-    pub fn with_dec_population(self) -> Entry {
+    pub fn with_dec_population(self) -> Self {
         self.with_population(self.population() - 1)
     }
 }

@@ -1,4 +1,11 @@
-#![feature(const_fn, const_if_match, const_panic, const_alloc_layout, const_loop)]
+#![feature(
+    const_fn,
+    const_if_match,
+    const_panic,
+    const_alloc_layout,
+    const_loop,
+    const_mut_refs
+)]
 #![feature(const_generics)]
 #![feature(asm)]
 #![feature(generic_associated_types)]
