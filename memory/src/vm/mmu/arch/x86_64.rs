@@ -492,13 +492,13 @@ pub fn compare_and_swap<Cx: Context>(
     Ok(true)
 }
 
-#[cfg(not(any(test, miri, feature = "std")))]
+#[cfg(target_os = "bare")]
 fn invlpg(addr: VirtAddr) {
     unsafe {
         asm!("invlpg ($0)" :: "r" (addr.0) :: "volatile");
     }
 }
-#[cfg(any(test, miri, feature = "std"))]
+#[cfg(not(target_os = "bare"))]
 fn invlpg(_: VirtAddr) {}
 
 impl PageSize {
