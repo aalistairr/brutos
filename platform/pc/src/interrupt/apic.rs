@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 
-use brutos_util_macros::{bitfield, ConvertInner};
+use brutos_util_macros::{bitenum_field, bitfield, BitEnum, ConvertInner};
 
 use crate::msr::{self, RW as _};
 
@@ -166,61 +166,13 @@ pub mod reg {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DeliveryStatus {
-    Idle,
-    SendPending,
+    Idle = 0,
+    SendPending = 1,
 }
 
-macro_rules! impl_delivery_status {
-    ($t:ty) => {
-        impl $t {
-            pub const fn delivery_status(&self) -> DeliveryStatus {
-                if self.is_pending() {
-                    DeliveryStatus::SendPending
-                } else {
-                    DeliveryStatus::Idle
-                }
-            }
-        }
-    };
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum PinPolarity {
-    ActiveHigh,
-    ActiveLow,
-}
-
-macro_rules! impl_pin_polarity {
-    ($t:ty) => {
-        impl $t {
-            pub const fn interrupt_input_pin_polarity(&self) -> PinPolarity {
-                if self.is_interrupt_input_pin_active_low() {
-                    PinPolarity::ActiveLow
-                } else {
-                    PinPolarity::ActiveHigh
-                }
-            }
-            pub const fn set_interrupt_input_pin_polarity(&mut self, pin_polarity: PinPolarity) {
-                self.set_interrupt_input_pin_active_low(match pin_polarity {
-                    PinPolarity::ActiveLow => true,
-                    PinPolarity::ActiveHigh => false,
-                });
-            }
-
-            pub const fn with_interrupt_input_pin_polarity(
-                mut self,
-                pin_polarity: PinPolarity,
-            ) -> Self {
-                self.set_interrupt_input_pin_polarity(pin_polarity);
-                self
-            }
-        }
-    };
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DeliveryMode {
     Fixed = 0b000,
     Smi = 0b010,
@@ -229,87 +181,10 @@ pub enum DeliveryMode {
     Init = 0b101,
 }
 
-macro_rules! impl_delivery_mode {
-    ($t:ty) => {
-        impl $t {
-            pub const fn delivery_mode(&self) -> DeliveryMode {
-                match self.delivery_mode_raw() {
-                    0b000 => DeliveryMode::Fixed,
-                    0b010 => DeliveryMode::Smi,
-                    0b100 => DeliveryMode::Nmi,
-                    0b111 => DeliveryMode::ExtInt,
-                    0b101 => DeliveryMode::Init,
-                    _ => panic!("invalid delivery mode"),
-                }
-            }
-            pub const fn set_delivery_mode(&mut self, delivery_mode: DeliveryMode) {
-                self.set_delivery_mode_raw(delivery_mode as usize)
-            }
-            pub const fn with_delivery_mode(mut self, delivery_mode: DeliveryMode) -> Self {
-                self.set_delivery_mode(delivery_mode);
-                self
-            }
-        }
-    };
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TriggerMode {
-    Edge,
-    Level,
-}
-
-macro_rules! impl_trigger_mode {
-    ($t:ty) => {
-        impl $t {
-            pub const fn trigger_mode(&self) -> TriggerMode {
-                if self.is_level_triggered() {
-                    TriggerMode::Level
-                } else {
-                    TriggerMode::Edge
-                }
-            }
-            pub const fn set_trigger_mode(&mut self, trigger_mode: TriggerMode) {
-                self.set_level_triggered(match trigger_mode {
-                    TriggerMode::Level => true,
-                    TriggerMode::Edge => false,
-                });
-            }
-            pub const fn with_trigger_mode(mut self, trigger_mode: TriggerMode) -> Self {
-                self.set_trigger_mode(trigger_mode);
-                self
-            }
-        }
-    };
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum TimerMode {
-    OneShot = 0b00,
-    Periodic = 0b01,
-    TscDeadline = 0b10,
-}
-
-macro_rules! impl_timer_mode {
-    ($t:ty) => {
-        impl $t {
-            pub const fn timer_mode(&self) -> TimerMode {
-                match self.timer_mode_raw() {
-                    0b00 => TimerMode::OneShot,
-                    0b01 => TimerMode::Periodic,
-                    0b10 => TimerMode::TscDeadline,
-                    _ => panic!("invalid timer mode"),
-                }
-            }
-            pub const fn set_timer_mode(&mut self, timer_mode: TimerMode) {
-                self.set_timer_mode_raw(timer_mode as usize);
-            }
-            pub const fn with_timer_mode(mut self, timer_mode: TimerMode) -> Self {
-                self.set_timer_mode(timer_mode);
-                self
-            }
-        }
-    };
+    Edge = 0,
+    Level = 1,
 }
 
 bitfield! {
@@ -317,13 +192,21 @@ bitfield! {
     pub struct Timer(u32);
 
     pub field vector: u8 => 0..8;
-    field pending: bool => 12;
+    field delivery_status_raw: usize => 12;
     pub field masked: bool => 16;
     field timer_mode_raw: usize => 17..19;
 }
 
-impl_delivery_status!(Timer);
-impl_timer_mode!(Timer);
+bitenum_field!(Timer.delivery_status: DeliveryStatus);
+
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
+pub enum TimerMode {
+    OneShot = 0b00,
+    Periodic = 0b01,
+    TscDeadline = 0b10,
+}
+
+bitenum_field!(Timer.timer_mode: TimerMode);
 
 bitfield! {
     #[derive(Copy, Clone, ConvertInner)]
@@ -331,17 +214,24 @@ bitfield! {
 
     pub field vector: u8 => 0..8;
     field delivery_mode_raw: usize => 8..11;
-    field pending: bool => 12;
-    field interrupt_input_pin_active_low: bool => 13;
+    field delivery_status_raw: usize => 12;
+    field interrupt_input_pin_polarity_raw: usize => 13;
     pub field remote_irr: bool => 14;
-    field level_triggered: bool => 15;
+    field trigger_mode_raw: usize => 15;
     pub field masked: bool => 16;
 }
 
-impl_delivery_mode!(LInt);
-impl_delivery_status!(LInt);
-impl_trigger_mode!(LInt);
-impl_pin_polarity!(LInt);
+bitenum_field!(LInt.delivery_mode: DeliveryMode);
+bitenum_field!(LInt.delivery_status: DeliveryStatus);
+bitenum_field!(LInt.trigger_mode: TriggerMode);
+
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PinPolarity {
+    ActiveHigh = 0,
+    ActiveLow = 1,
+}
+
+bitenum_field!(LInt.interrupt_input_pin_polarity: PinPolarity);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
@@ -349,23 +239,23 @@ bitfield! {
 
     pub field vector: u8 => 0..8;
     field delivery_mode_raw: usize => 8..11;
-    field pending: bool => 12;
+    field delivery_status_raw: usize => 12;
     pub field masked: bool => 16;
 }
 
-impl_delivery_mode!(LvtRegister);
-impl_delivery_status!(LvtRegister);
+bitenum_field!(LvtRegister.delivery_mode: DeliveryMode);
+bitenum_field!(LvtRegister.delivery_status: DeliveryStatus);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct ErrorRegister(u32);
 
     pub field vector: u8 => 0..8;
-    field pending: bool => 12;
+    field delivery_status_raw: usize => 12;
     pub field masked: bool => 16;
 }
 
-impl_delivery_status!(ErrorRegister);
+bitenum_field!(ErrorRegister.delivery_status: DeliveryStatus);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
@@ -388,6 +278,7 @@ bitfield! {
     field divide_value_raw: usize => 0..2 ~ 3;
 }
 
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DivideValue {
     By2 = 0b000,
     By4 = 0b001,
@@ -399,30 +290,7 @@ pub enum DivideValue {
     By1 = 0b111,
 }
 
-impl DivideConfiguration {
-    pub const fn divide_value(&self) -> DivideValue {
-        match self.divide_value_raw() {
-            0b000 => DivideValue::By2,
-            0b001 => DivideValue::By4,
-            0b010 => DivideValue::By8,
-            0b011 => DivideValue::By16,
-            0b100 => DivideValue::By32,
-            0b101 => DivideValue::By64,
-            0b110 => DivideValue::By128,
-            0b111 => DivideValue::By1,
-            _ => unreachable!(),
-        }
-    }
-
-    pub const fn set_divide_value(&mut self, divide_value: DivideValue) {
-        self.set_divide_value_raw(divide_value as usize);
-    }
-
-    pub const fn with_divide_value(mut self, divide_value: DivideValue) -> Self {
-        self.set_divide_value(divide_value);
-        self
-    }
-}
+bitenum_field!(DivideConfiguration.divide_value: DivideValue);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -430,47 +298,27 @@ bitfield! {
 
     pub field vector: u8 => 0[0..8];
     field delivery_mode_raw: usize => 0[8..11];
-    field logical_destination: bool => 0[11];
-    field pending: bool => 0[12];
+    field destination_mode_raw: usize => 0[11];
+    field delivery_status_raw: usize => 0[12];
     pub field level_assert: bool => 0[14];
-    field level_triggered: bool => 0[15];
+    field trigger_mode_raw: usize => 0[15];
     field destination_shorthand_raw: usize => 0[18..20];
     pub field destination: u8 => 1[24..32];
 }
 
-impl_delivery_mode!(InterruptCommand);
-impl_delivery_status!(InterruptCommand);
-impl_trigger_mode!(InterruptCommand);
+bitenum_field!(InterruptCommand.delivery_mode: DeliveryMode);
+bitenum_field!(InterruptCommand.delivery_status: DeliveryStatus);
+bitenum_field!(InterruptCommand.trigger_mode: TriggerMode);
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DestinationMode {
-    Physical,
-    Logical,
+    Physical = 0,
+    Logical = 1,
 }
 
-impl InterruptCommand {
-    pub const fn destination_mode(&self) -> DestinationMode {
-        if self.is_logical_destination() {
-            DestinationMode::Logical
-        } else {
-            DestinationMode::Physical
-        }
-    }
+bitenum_field!(InterruptCommand.destination_mode: DestinationMode);
 
-    pub const fn set_destination_mode(&mut self, destination_mode: DestinationMode) {
-        self.set_logical_destination(match destination_mode {
-            DestinationMode::Logical => true,
-            DestinationMode::Physical => false,
-        });
-    }
-
-    pub const fn with_destination_mode(mut self, destination_mode: DestinationMode) -> Self {
-        self.set_destination_mode(destination_mode);
-        self
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DestinationShorthand {
     NoShorthand = 0b00,
     Selff = 0b01,
@@ -478,29 +326,7 @@ pub enum DestinationShorthand {
     AllExcludingSelff = 0b11,
 }
 
-impl InterruptCommand {
-    pub const fn destination_shorthand(&self) -> DestinationShorthand {
-        match self.destination_shorthand_raw() {
-            0b00 => DestinationShorthand::NoShorthand,
-            0b01 => DestinationShorthand::Selff,
-            0b10 => DestinationShorthand::AllIncludingSelff,
-            0b11 => DestinationShorthand::AllExcludingSelff,
-            _ => unreachable!(),
-        }
-    }
-
-    pub const fn set_destination_shorthand(&mut self, destination_shorthand: DestinationShorthand) {
-        self.set_destination_shorthand_raw(destination_shorthand as usize);
-    }
-
-    pub const fn with_destination_shorthand(
-        mut self,
-        destination_shorthand: DestinationShorthand,
-    ) -> Self {
-        self.set_destination_shorthand(destination_shorthand);
-        self
-    }
-}
+bitenum_field!(InterruptCommand.destination_shorthand: DestinationShorthand);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
@@ -516,29 +342,13 @@ bitfield! {
     field model_raw: usize => 28..32;
 }
 
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Model {
     Cluster = 0b0000,
     Flat = 0b1111,
 }
 
-impl DestinationFormat {
-    pub const fn model(&self) -> Model {
-        match self.model_raw() {
-            0b0000 => Model::Cluster,
-            0b1111 => Model::Flat,
-            _ => unreachable!(),
-        }
-    }
-
-    pub const fn set_model(&mut self, model: Model) {
-        self.set_model_raw(model as usize);
-    }
-
-    pub const fn with_model(mut self, model: Model) -> Self {
-        self.set_model(model);
-        self
-    }
-}
+bitenum_field!(DestinationFormat.model: Model);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]

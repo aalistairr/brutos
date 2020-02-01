@@ -1,8 +1,19 @@
 use proc_macro::TokenStream;
 
+mod bitenum;
 mod bitfield;
 mod convert_inner;
 mod selector;
+
+#[proc_macro_derive(BitEnum)]
+pub fn bitenum(input: TokenStream) -> TokenStream {
+    bitenum::bitenum(input)
+}
+
+#[proc_macro]
+pub fn bitenum_field(input: TokenStream) -> TokenStream {
+    bitenum::bitenum_field(input)
+}
 
 #[proc_macro]
 pub fn bitfield(input: TokenStream) -> TokenStream {
