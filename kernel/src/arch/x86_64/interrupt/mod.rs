@@ -1,6 +1,6 @@
 use core::pin::Pin;
 
-use brutos_platform_pc::idt::{Descriptor, Idt, Type};
+use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
 
 use crate::arch::x86_64::io;
 
