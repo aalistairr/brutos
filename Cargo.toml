@@ -4,6 +4,7 @@ members = [
     "kernel",
     "memory",
     "multiboot2",
+    "platform/pc",
     "sync",
     "task",
     "util",

@@ -14,14 +14,14 @@ pub mod arch;
 pub mod sched;
 
 pub trait Context: Default + AllocOne<ArcInner<Task<Self>>> + brutos_sync::Critical {
-    type Process;
+    type AddrSpace;
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory>;
     unsafe fn dealloc_stack(&mut self, stack: VirtAddr);
 }
 
 pub struct Task<Cx: Context> {
-    pub process: Cx::Process,
+    pub addr_space: Cx::AddrSpace,
     pub id: usize,
     pub switch_lock: Spinlock<(), Cx>,
     state: UnsafeCell<State<Cx>>,
@@ -52,13 +52,13 @@ pub enum EntryPoint {
 
 impl<Cx: Context> Task<Cx> {
     pub fn new(
-        process: Cx::Process,
+        addr_space: Cx::AddrSpace,
         id: usize,
         entry_point: EntryPoint,
     ) -> Result<Pin<Arc<Task<Cx>, Cx>>, OutOfMemory> {
         let kernel_stack = Cx::default().alloc_stack()?;
         let task = Arc::pin(Task {
-            process,
+            addr_space,
             id,
             switch_lock: Spinlock::new(()),
             state: UnsafeCell::new(State {

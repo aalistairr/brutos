@@ -23,7 +23,7 @@ pub struct Allocator<'a, T> {
 }
 
 #[derive(Debug)]
-struct Region<'a, T> {
+pub struct Region<'a, T> {
     range: Range<PhysAddr>,
     pages: &'a [Page<'a, T>],
 }
@@ -108,24 +108,11 @@ impl<'a, T: 'a> Allocator<'a, T> {
         Ok(Some((page.addr, &page.data)))
     }
 
-    fn find_region(&self, addr: PhysAddr) -> Result<&'a Region<'a, T>, NotAllocated> {
-        self.regions
-            .binary_search_by(|region| {
-                if region.range.contains(&addr) {
-                    core::cmp::Ordering::Equal
-                } else {
-                    region.range.start.cmp(&addr)
-                }
-            })
-            .map(|region| &self.regions[region])
-            .map_err(|_| NotAllocated)
-    }
-
     pub fn free(mut self: Pin<&mut Self>, mut addr: PhysAddr) -> Result<(), NotAllocated> {
         if !addr.is_aligned(PAGE_SIZE) {
             return Err(NotAllocated);
         }
-        let region = self.find_region(addr)?;
+        let region = find_region(self.regions, addr)?;
         let (initial_order, tree_order) = {
             let page = region.page_at_addr(addr);
             match page.state.get() {
@@ -161,14 +148,6 @@ impl<'a, T: 'a> Allocator<'a, T> {
         unreachable!()
     }
 
-    pub fn find(&self, addr: PhysAddr) -> Result<&'a T, NotAllocated> {
-        if !addr.is_aligned(PAGE_SIZE) {
-            return Err(NotAllocated);
-        }
-        let region = self.find_region(addr)?;
-        Ok(&region.page_at_addr(addr).data)
-    }
-
     fn add_to_free_pages(
         self: Pin<&mut Self>,
         region: &'a Region<'a, T>,
@@ -195,6 +174,33 @@ impl<'a, T: 'a> Allocator<'a, T> {
             }
         }
     }
+}
+
+fn find_region<'a, T>(
+    regions: &'a [Region<'a, T>],
+    addr: PhysAddr,
+) -> Result<&'a Region<'a, T>, NotAllocated> {
+    regions
+        .binary_search_by(|region| {
+            if region.range.contains(&addr) {
+                core::cmp::Ordering::Equal
+            } else {
+                region.range.start.cmp(&addr)
+            }
+        })
+        .map(|region| &regions[region])
+        .map_err(|_| NotAllocated)
+}
+
+pub fn get_data<'a, T>(
+    regions: &'a [Region<'a, T>],
+    addr: PhysAddr,
+) -> Result<&'a T, NotAllocated> {
+    if !addr.is_aligned(PAGE_SIZE) {
+        return Err(NotAllocated);
+    }
+    let region = find_region(regions, addr)?;
+    Ok(&region.page_at_addr(addr).data)
 }
 
 #[cfg(test)]

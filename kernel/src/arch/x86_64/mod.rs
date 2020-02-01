@@ -1,12 +1,16 @@
-use brutos_memory::PhysAddr;
+use brutos_alloc::OutOfMemory;
+use brutos_memory::{AllocPhysPage, Order, PhysAddr};
 use brutos_multiboot2::ffi::BootInfo;
 use brutos_multiboot2::{MmapEntryTy, Tag};
 use brutos_task as task;
+
+use crate::Cx;
 
 pub const VMA_OFFSET: usize = 0xffffffff80000000;
 
 pub mod entry;
 pub mod framebuffer;
+pub mod interrupt;
 pub mod io;
 pub mod memory;
 
@@ -25,9 +29,11 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
     let mut dummy_state = task::State::<crate::Cx>::dummy();
     let dummy_state = unsafe { core::pin::Pin::new_unchecked(&mut dummy_state) };
     unsafe {
-        task::arch::load_gdt();
         task::State::activate(dummy_state);
         task::arch::current_task_inc_critical_count();
+
+        task::arch::load_gdt();
+        self::interrupt::initialize();
     }
 
     self::framebuffer::Screen::lock().clear();
@@ -67,4 +73,22 @@ macro_rules! println {
 #[macro_export]
 macro_rules! print {
     ($($arg:tt)*) => ($crate::arch::framebuffer::print(core::format_args!($($arg)*)));
+}
+
+unsafe impl brutos_memory::vm::mmu::arch::Context for Cx {
+    fn alloc_table(&mut self) -> Result<PhysAddr, OutOfMemory> {
+        <Cx as AllocPhysPage>::alloc(Order(0))
+            .map(|(addr, _)| addr)
+            .map_err(|()| OutOfMemory)
+    }
+
+    unsafe fn dealloc_table(&mut self, addr: PhysAddr) {
+        <Cx as AllocPhysPage>::dealloc(addr, Order(0));
+    }
+
+    fn map_table(&mut self, addr: PhysAddr) -> *mut brutos_memory::vm::mmu::arch::Table {
+        self::memory::map_phys_ident(addr, Order(0).size())
+            .expect("Failed to map page translation table into memory")
+            .as_ptr() as *mut _
+    }
 }

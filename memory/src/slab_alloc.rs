@@ -22,6 +22,9 @@ pub struct Allocator<Cx: AllocMappedPage> {
     _marker: PhantomData<Cx>,
 }
 
+unsafe impl<Cx: AllocMappedPage> Send for Allocator<Cx> {}
+unsafe impl<Cx: AllocMappedPage> Sync for Allocator<Cx> {}
+
 impl<Cx: AllocMappedPage> Allocator<Cx> {
     fn deconstruct<'a>(
         self: &'a mut Pin<&mut Self>,

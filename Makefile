@@ -9,28 +9,30 @@ endif
 
 BUILD_DIR ?= target/$(TARGET)/$(CFG)
 
-$(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S
-	# xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS)
+
+$(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S kernel/src/arch/x86_64/interrupt/handlers.rs
 	xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS) -- -C link-arg=-Tkernel/$(ARCH).lds -C link-arg=-n
 
 kernel/src/arch/x86_64/page_tables.S: kernel/src/arch/x86_64/page_tables.py
 	python3 $^ > $@
 
-$(BUILD_DIR)/brutos-kernel.img: $(BUILD_DIR)/brutos-kernel
-	rm -rf $(BUILD_DIR)/rabid_kernel.img $(BUILD_DIR)/stage
-	mkdir -p $(BUILD_DIR)/stage
-	cp $^ $(BUILD_DIR)/stage
-	hdiutil create -fs fat32 -imagekey diskimage-class=CRawDiskImage -srcfolder $(BUILD_DIR)/stage $@
-	mv $@.dmg $@
+kernel/src/arch/x86_64/interrupt/handlers.rs: kernel/src/arch/x86_64/interrupt/handlers.py
+	python3 $^ > $@
+
+
+$(BUILD_DIR)/brutos-kernel.iso: $(BUILD_DIR)/brutos-kernel
+	rm -f $@
+	cd $(BUILD_DIR); xorriso -outdev brutos-kernel.iso -add brutos-kernel
 
 
 .PHONY: qemu
-qemu: $(BUILD_DIR)/brutos-kernel.img
-	qemu-system-x86_64 -hda assets/grub.iso -hdb $(BUILD_DIR)/brutos-kernel.img -cpu Icelake-Client-noTSX
+qemu: $(BUILD_DIR)/brutos-kernel.iso
+	qemu-system-x86_64 -drive if=ide,index=0,format=raw,file=assets/grub.iso -drive if=ide,index=1,format=raw,file=$(BUILD_DIR)/brutos-kernel.iso -cpu qemu64,+fsgsbase
 
 .PHONY: bochs
-bochs: $(BUILD_DIR)/brutos-kernel.img
+bochs: $(BUILD_DIR)/brutos-kernel.iso
 	bochs -f assets/bochsrc.$(CFG)
+
 
 .PHONY: always-run
 always-run:

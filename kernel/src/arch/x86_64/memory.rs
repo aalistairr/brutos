@@ -1,4 +1,5 @@
 use core::ops::Range;
+use core::ptr::NonNull;
 
 use brutos_memory::phys_alloc::bootstrap;
 use brutos_memory::PhysAddr;
@@ -10,6 +11,21 @@ pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
 pub const PHYS_IDENT_SIZE: usize = 0x0000400000000000;
 pub const PHYS_IDENT_END: usize = PHYS_IDENT_OFFSET + PHYS_IDENT_SIZE;
 
+pub fn map_phys_ident(addr: PhysAddr, size: usize) -> Result<NonNull<u8>, ()> {
+    if addr.0.checked_add(size).ok_or(())? > PHYS_IDENT_SIZE {
+        return Err(());
+    }
+    return unsafe {
+        Ok(NonNull::new_unchecked(
+            (addr.0 + PHYS_IDENT_OFFSET) as *mut u8,
+        ))
+    };
+}
+
+pub fn phys_ident_addr(ptr: NonNull<u8>) -> PhysAddr {
+    PhysAddr(ptr.as_ptr() as usize - PHYS_IDENT_OFFSET)
+}
+
 unsafe impl bootstrap::Context for Cx {
     type Err = FailedToBootstrap;
 
@@ -20,10 +36,9 @@ unsafe impl bootstrap::Context for Cx {
         align: usize,
     ) -> Result<*mut u8, FailedToBootstrap> {
         debug_assert!(addr.is_aligned(align));
-        if addr.0.checked_add(size).ok_or(FailedToBootstrap)? > PHYS_IDENT_SIZE {
-            return Err(FailedToBootstrap);
-        }
-        return Ok((addr.0 + PHYS_IDENT_OFFSET) as *mut u8);
+        map_phys_ident(addr, size)
+            .map(NonNull::as_ptr)
+            .map_err(|()| FailedToBootstrap)
     }
 }
 

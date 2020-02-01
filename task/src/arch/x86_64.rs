@@ -30,7 +30,7 @@ impl<Cx: Context> Task<Cx> {
 
 impl<Cx: Context> State<Cx> {
     pub unsafe fn activate(this: Pin<&mut Self>) {
-        let this = Pin::into_inner_unchecked(this) as *mut _;
+        let this = Pin::into_inner_unchecked(this) as *mut Self;
         asm!("wrgsbase $0" :: "r" (this) :: "volatile");
     }
 }
@@ -244,7 +244,7 @@ global_asm!(
     .byte 0
     .global GDTR
     GDTR:
-    .short GDT_end - GDT
+    .short GDT_end - GDT - 1
     .quad GDT
 "
 );

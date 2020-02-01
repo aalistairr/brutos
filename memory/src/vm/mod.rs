@@ -124,6 +124,7 @@ where
     }
 }
 
+#[derive(Default)]
 pub struct PageRefCount(AtomicUsize);
 
 pub struct FaultConditions {

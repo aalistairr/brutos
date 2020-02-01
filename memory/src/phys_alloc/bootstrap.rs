@@ -29,7 +29,7 @@ impl<'a, T: Default> Allocator<'a, T> {
         self: Pin<&mut Self>,
         cx: &mut Cx,
         spec: Spec,
-    ) -> Result<usize, Error<Cx::Err>>
+    ) -> Result<(usize, &'a [Region<'a, T>]), Error<Cx::Err>>
     where
         Cx: Context,
         Spec: Clone + IntoIterator<Item = Range<PhysAddr>>,
@@ -41,7 +41,7 @@ impl<'a, T: Default> Allocator<'a, T> {
         mut self: Pin<&mut Self>,
         cx: &mut Cx,
         spec: Spec,
-    ) -> Result<usize, Error<Cx::Err>>
+    ) -> Result<(usize, &'a [Region<'a, T>]), Error<Cx::Err>>
     where
         Cx: Context,
         Spec: Clone + IntoIterator<Item = Range<PhysAddr>>,
@@ -143,10 +143,10 @@ impl<'a, T: Default> Allocator<'a, T> {
         }
 
         unsafe {
-            self.get_unchecked_mut().regions = regions;
+            self.as_mut().get_unchecked_mut().regions = regions;
         }
 
-        Ok(free_memory)
+        Ok((free_memory, self.regions))
     }
 }
 
@@ -339,7 +339,7 @@ mod tests {
 
         let mut allocator = Box::pin(Allocator::<()>::new());
         allocator.as_mut().initialize();
-        let free_memory = unsafe { allocator.as_mut().bootstrap(&mut mapper, mmap).unwrap() };
+        let (free_memory, _) = unsafe { allocator.as_mut().bootstrap(&mut mapper, mmap).unwrap() };
         eprintln!("Available memory: {:#x}", free_memory);
 
         allocator.as_mut().shuffle_free_pages();
