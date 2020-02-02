@@ -1,16 +1,56 @@
 use core::cell::UnsafeCell;
 use core::ptr;
 
+use brutos_util_macros::{bitfield, BitEnum, BitfieldNew};
+
 use crate::io::outb;
 
 #[repr(C)]
 pub struct Character {
     value: u8,
-    color: u8,
+    style: Style,
 }
 
-const COLOR_DEFAULT: u8 = 0x07;
-const COLOR_INVERTED: u8 = 0x70;
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, BitfieldNew)]
+    #[repr(transparent)]
+    pub struct Style(u8);
+
+    pub field foreground: Color => 0..4;
+    pub field background: Color => 4..8;
+}
+
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Color {
+    Black = 0x0,
+    Blue = 0x1,
+    Green = 0x2,
+    Cyan = 0x3,
+    Red = 0x4,
+    Purple = 0x5,
+    Brown = 0x6,
+    Gray = 0x7,
+    DarkGray = 0x8,
+    LightBlue = 0x9,
+    LightGreen = 0xa,
+    LightCyan = 0xb,
+    LightRed = 0xc,
+    LightPurple = 0xd,
+    Yellow = 0xe,
+    White = 0xf,
+}
+
+impl Style {
+    pub const fn inverted(self) -> Self {
+        let fg = self.foreground();
+        let bg = self.background();
+        Style::new().with_foreground(bg).with_background(fg)
+    }
+}
+
+pub const DEFAULT_STYLE: Style = Style::new()
+    .with_foreground(Color::Gray)
+    .with_background(Color::Black);
 
 pub const FB_WIDTH: usize = 80;
 pub const FB_HEIGHT: usize = 25;
@@ -21,6 +61,7 @@ pub const FRAMEBUFFER_ADDR: usize = 0xb8000;
 
 pub struct Screen<'a> {
     framebuffer: &'a Framebuffer,
+    pub style: Style,
     x: usize,
     y: usize,
 }
@@ -29,6 +70,7 @@ impl<'a> Screen<'a> {
     pub fn with_framebuffer(framebuffer: &'a Framebuffer) -> Screen<'a> {
         Screen {
             framebuffer,
+            style: DEFAULT_STYLE,
             x: 0,
             y: 0,
         }
@@ -42,7 +84,7 @@ impl<'a> Screen<'a> {
                         self.framebuffer[y][x].get(),
                         Character {
                             value: ' ' as u8,
-                            color: COLOR_DEFAULT,
+                            style: self.style,
                         },
                     );
                 }
@@ -106,11 +148,11 @@ impl<'a> core::fmt::Write for Screen<'a> {
                 '\n' => self.newline(),
                 c if c.is_ascii() && !c.is_control() => self.put_character(Character {
                     value: c as u8,
-                    color: COLOR_DEFAULT,
+                    style: self.style,
                 }),
                 _ => self.put_character(Character {
                     value: '?' as u8,
-                    color: COLOR_INVERTED,
+                    style: self.style.inverted(),
                 }),
             }
         }
