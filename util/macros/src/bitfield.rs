@@ -3,8 +3,9 @@ use proc_macro2::Span;
 use quote::{format_ident, quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{
-    braced, bracketed, parse_macro_input, BinOp, Error, Expr, ExprBinary, ExprLit, ExprParen,
-    ExprRepeat, Fields, Ident, ItemStruct, Lit, LitInt, Path, Token, Type, Visibility,
+    braced, bracketed, parse_macro_input, BinOp, Data, DeriveInput, Error, Expr, ExprBinary,
+    ExprLit, ExprParen, ExprRepeat, Fields, Ident, ItemStruct, Lit, LitInt, Path, Token, Type,
+    Visibility,
 };
 
 struct BitfieldMacroInput {
@@ -581,5 +582,48 @@ pub fn bitfield(input: TokenStream) -> TokenStream {
         }
     };
 
+    TokenStream::from(expanded)
+}
+
+pub fn bitfield_new(input: TokenStream) -> TokenStream {
+    let DeriveInput {
+        vis,
+        ident,
+        generics,
+        data,
+        ..
+    } = parse_macro_input!(input as DeriveInput);
+    let (impl_generics, ty_generics, where_clause) = generics.split_for_impl();
+    let inner_ty = match &data {
+        Data::Struct(strukt) => match &strukt.fields {
+            Fields::Unnamed(f) if f.unnamed.len() == 1 => &f.unnamed[0].ty,
+            _ => panic!("the type must be a tuple struct with one field"),
+        },
+        _ => panic!("the type must be a tuple struct with one field"),
+    };
+
+    let zero = Expr::Lit(ExprLit {
+        attrs: Vec::new(),
+        lit: Lit::Int(LitInt::new("0", Span::call_site())),
+    });
+    let zero = match inner_ty {
+        Type::Array(t) => Expr::Repeat(ExprRepeat {
+            attrs: Vec::new(),
+            bracket_token: syn::token::Bracket {
+                span: Span::call_site(),
+            },
+            expr: Box::new(zero),
+            semi_token: Token![;](Span::call_site()),
+            len: Box::new(t.len.clone()),
+        }),
+        _ => zero,
+    };
+    let expanded = quote! {
+        impl #impl_generics #ident #ty_generics #where_clause {
+            #vis const fn new() -> Self {
+                #ident(#zero)
+            }
+        }
+    };
     TokenStream::from(expanded)
 }

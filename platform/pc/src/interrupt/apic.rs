@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 
-use brutos_util_macros::{bitfield, BitEnum, ConvertInner};
+use brutos_util_macros::{bitfield, BitEnum, BitfieldNew, ConvertInner};
 
 use crate::msr::{self, RW as _};
 
@@ -188,7 +188,7 @@ pub enum TriggerMode {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, ConvertInner)]
+    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
     pub struct Timer(u32);
 
     pub field vector: u8 => 0..8;
@@ -205,7 +205,7 @@ pub enum TimerMode {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, ConvertInner)]
+    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
     pub struct LInt(u32);
 
     pub field vector: u8 => 0..8;
@@ -224,7 +224,7 @@ pub enum PinPolarity {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct LvtRegister(u32);
 
     pub field vector: u8 => 0..8;
@@ -234,7 +234,7 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct ErrorRegister(u32);
 
     pub field vector: u8 => 0..8;
@@ -257,7 +257,7 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct DivideConfiguration(u32);
 
     pub field divide_value: DivideValue => 0..2 ~ 3;
@@ -276,7 +276,7 @@ pub enum DivideValue {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, BitfieldNew)]
     pub struct InterruptCommand([u32; 2]);
 
     pub field vector: u8 => 0[0..8];
@@ -304,14 +304,14 @@ pub enum DestinationShorthand {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct LogicalDestination(u32);
 
     pub field logical_apic_id: u8 => 24..32;
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct DestinationFormat(u32);
 
     pub field model: Model => 28..32;
@@ -324,7 +324,7 @@ pub enum Model {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct SpuriousInterruptVector(u32);
 
     pub field vector: u8 => 0..8;
