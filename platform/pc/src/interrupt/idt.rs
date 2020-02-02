@@ -1,47 +1,25 @@
 use core::pin::Pin;
 
-use brutos_util_macros::bitfield;
+use brutos_util_macros::{bitfield, BitEnum, BitfieldNew};
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+    #[derive(Copy, Clone, PartialEq, Eq, Default, Debug, BitfieldNew)]
     #[repr(transparent)]
     pub struct Descriptor([u32; 4]);
 
     pub field offset: usize => 0[0..16] ~ 1[16..32] ~ 2[0..32];
     pub field segment: u16 => 0[16..32];
-    field raw_ist: usize => 1[0..3];
-    field raw_ty: usize => 1[8..12];
-    field raw_dpl: usize => 1[13..15];
+    pub field ist: usize => 1[0..3];
+    pub field ty: Type => 1[8..12];
+    pub field dpl: usize => 1[13..15];
     pub field present: bool => 1[15];
 }
 
+#[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Type {
-    Reserved = 0,
+    Reserved = 0b0000,
     Interrupt = 0b1110,
     Trap = 0b1111,
-}
-
-impl Descriptor {
-    pub const fn new() -> Descriptor {
-        Descriptor([0; 4])
-    }
-
-    pub const fn ty(&self) -> Type {
-        match self.raw_ty() {
-            0b1110 => Type::Interrupt,
-            0b1111 => Type::Trap,
-            _ => Type::Reserved,
-        }
-    }
-
-    pub const fn set_ty(&mut self, ty: Type) {
-        self.set_raw_ty(ty as usize)
-    }
-
-    pub const fn with_ty(mut self, ty: Type) -> Self {
-        self.set_ty(ty);
-        self
-    }
 }
 
 pub const IDT_LEN: usize = 256;
