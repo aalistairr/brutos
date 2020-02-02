@@ -4,7 +4,7 @@ use quote::{format_ident, quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{
     braced, parse_macro_input, BinOp, Error, Expr, ExprBinary, ExprLit, ExprParen, ExprRepeat,
-    Fields, Ident, ItemStruct, Lit, LitInt, Token, Type, Visibility,
+    Fields, Ident, ItemStruct, Lit, LitInt, Path, Token, Type, Visibility,
 };
 
 struct BitfieldMacroInput {
@@ -150,6 +150,13 @@ impl ToTokens for AssertInBounds {
     }
 }
 
+fn is_uint(path: &Path) -> bool {
+    match path.get_ident() {
+        Some(x) => x == "usize" || x == "u8" || x == "u16" || x == "u32" || x == "u64",
+        _ => false,
+    }
+}
+
 impl ToTokens for ValueIsZeroFn {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let t = &self.0;
@@ -168,6 +175,11 @@ impl ToTokens for ValueIsZeroFn {
                     }
                 });
             }
+            Type::Path(p) if !is_uint(&p.path) => tokens.extend(quote! {
+                const fn value_is_zero(value: <#t as brutos_util::ConvertRepr>::Repr) -> bool {
+                    value == 0
+                }
+            }),
             t => tokens.extend(quote! {
                 const fn value_is_zero(value: #t) -> bool {
                     value == 0
@@ -227,6 +239,39 @@ impl ToTokens for BoolField {
     }
 }
 
+enum IntoValue {
+    Same,
+    Convert(Type),
+}
+
+enum FromValue {
+    Same,
+    Convert,
+}
+
+impl ToTokens for IntoValue {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            IntoValue::Same => tokens.extend(quote! { x }),
+            IntoValue::Convert(t) => tokens.extend(quote! {
+                match <#t>::from_repr(x) {
+                    Some(x) => x,
+                    None => panic!(concat!("invalid value for `", stringify!(#t), "`")),
+                }
+            }),
+        }
+    }
+}
+
+impl ToTokens for FromValue {
+    fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
+        match self {
+            FromValue::Same => tokens.extend(quote! { value }),
+            FromValue::Convert => tokens.extend(quote! { value.into_repr() }),
+        }
+    }
+}
+
 impl ToTokens for UintField {
     fn to_tokens(&self, tokens: &mut proc_macro2::TokenStream) {
         let vis = &self.0.vis;
@@ -269,9 +314,25 @@ impl ToTokens for UintField {
             },
             _ => panic!("the bitfield must be a tuple struct with one field"),
         };
-        let (value_nt, value_t_len) = match ty {
-            Type::Array(t) => ((*t.elem).clone(), Some(t.len.clone())),
-            t => (t.clone(), None),
+        let (value_nt, value_t_len, to_value, from_value) = match ty {
+            Type::Array(t) => (
+                (*t.elem).clone(),
+                Some(t.len.clone()),
+                IntoValue::Same,
+                FromValue::Same,
+            ),
+            Type::Path(p) if !is_uint(&p.path) => {
+                let x = quote! { <#p as brutos_util::ConvertRepr>::Repr };
+                let x: TokenStream = x.into();
+                let new_p = syn::parse_macro_input::parse::<Type>(x).unwrap();
+                (
+                    new_p,
+                    None,
+                    IntoValue::Convert(ty.clone()),
+                    FromValue::Convert,
+                )
+            }
+            t => (t.clone(), None, IntoValue::Same, FromValue::Same),
         };
         for (value, selff) in map {
             value_array_index.push(ArrayIndex(value.array_index.clone()));
@@ -323,7 +384,7 @@ impl ToTokens for UintField {
                     ((((self.0 #self_array_index & Self::__self_mask(#self_bits_start..#self_bits_end)) >> #self_bits_start) as #value_nt)
                     << #value_bits_start);
                 )*
-                x
+                #to_value
             }
 
             #vis const fn #setter_name(&mut self, value: #ty) {
@@ -336,6 +397,8 @@ impl ToTokens for UintField {
                         ((1 << (r.end - r.start)) - 1) << r.start
                     }
                 }
+
+                let value = #from_value;
 
                 {
                     #value_is_zero_fn

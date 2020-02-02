@@ -59,6 +59,10 @@ pub fn bitenum(input: TokenStream) -> TokenStream {
         });
 
     let expanded = quote! {
+        impl #impl_generics brutos_util::ConvertRepr for #ident #ty_generics #where_clause {
+            type Repr = #repr;
+        }
+
         impl #impl_generics #ident #ty_generics #where_clause {
             #vis const fn from_repr(value: #repr) -> Option<Self> {
                 match value {

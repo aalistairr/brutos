@@ -1,6 +1,6 @@
 use core::cell::UnsafeCell;
 
-use brutos_util_macros::{bitenum_field, bitfield, BitEnum, ConvertInner};
+use brutos_util_macros::{bitfield, BitEnum, ConvertInner};
 
 use crate::msr::{self, RW as _};
 
@@ -192,12 +192,10 @@ bitfield! {
     pub struct Timer(u32);
 
     pub field vector: u8 => 0..8;
-    field delivery_status_raw: usize => 12;
+    pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
-    field timer_mode_raw: usize => 17..19;
+    pub field timer_mode: TimerMode => 17..19;
 }
-
-bitenum_field!(Timer.delivery_status: DeliveryStatus);
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum TimerMode {
@@ -206,24 +204,18 @@ pub enum TimerMode {
     TscDeadline = 0b10,
 }
 
-bitenum_field!(Timer.timer_mode: TimerMode);
-
 bitfield! {
     #[derive(Copy, Clone, ConvertInner)]
     pub struct LInt(u32);
 
     pub field vector: u8 => 0..8;
-    field delivery_mode_raw: usize => 8..11;
-    field delivery_status_raw: usize => 12;
-    field interrupt_input_pin_polarity_raw: usize => 13;
+    pub field delivery_mode_raw: DeliveryMode => 8..11;
+    pub field delivery_status: DeliveryStatus => 12;
+    pub field interrupt_input_pin_polarity: PinPolarity => 13;
     pub field remote_irr: bool => 14;
-    field trigger_mode_raw: usize => 15;
+    pub field trigger_mode: TriggerMode => 15;
     pub field masked: bool => 16;
 }
-
-bitenum_field!(LInt.delivery_mode: DeliveryMode);
-bitenum_field!(LInt.delivery_status: DeliveryStatus);
-bitenum_field!(LInt.trigger_mode: TriggerMode);
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PinPolarity {
@@ -231,31 +223,24 @@ pub enum PinPolarity {
     ActiveLow = 1,
 }
 
-bitenum_field!(LInt.interrupt_input_pin_polarity: PinPolarity);
-
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct LvtRegister(u32);
 
     pub field vector: u8 => 0..8;
-    field delivery_mode_raw: usize => 8..11;
-    field delivery_status_raw: usize => 12;
+    pub field delivery_mode: DeliveryMode => 8..11;
+    pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
 }
-
-bitenum_field!(LvtRegister.delivery_mode: DeliveryMode);
-bitenum_field!(LvtRegister.delivery_status: DeliveryStatus);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct ErrorRegister(u32);
 
     pub field vector: u8 => 0..8;
-    field delivery_status_raw: usize => 12;
+    pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
 }
-
-bitenum_field!(ErrorRegister.delivery_status: DeliveryStatus);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
@@ -275,7 +260,7 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct DivideConfiguration(u32);
 
-    field divide_value_raw: usize => 0..2 ~ 3;
+    pub field divide_value: DivideValue => 0..2 ~ 3;
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -290,33 +275,25 @@ pub enum DivideValue {
     By1 = 0b111,
 }
 
-bitenum_field!(DivideConfiguration.divide_value: DivideValue);
-
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct InterruptCommand([u32; 2]);
 
     pub field vector: u8 => 0[0..8];
-    field delivery_mode_raw: usize => 0[8..11];
-    field destination_mode_raw: usize => 0[11];
-    field delivery_status_raw: usize => 0[12];
+    pub field delivery_mode: DeliveryMode => 0[8..11];
+    pub field destination_mode: DestinationMode => 0[11];
+    pub field delivery_status: DeliveryStatus => 0[12];
     pub field level_assert: bool => 0[14];
-    field trigger_mode_raw: usize => 0[15];
-    field destination_shorthand_raw: usize => 0[18..20];
+    pub field trigger_mode: TriggerMode => 0[15];
+    pub field destination_shorthand: DestinationShorthand => 0[18..20];
     pub field destination: u8 => 1[24..32];
 }
-
-bitenum_field!(InterruptCommand.delivery_mode: DeliveryMode);
-bitenum_field!(InterruptCommand.delivery_status: DeliveryStatus);
-bitenum_field!(InterruptCommand.trigger_mode: TriggerMode);
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DestinationMode {
     Physical = 0,
     Logical = 1,
 }
-
-bitenum_field!(InterruptCommand.destination_mode: DestinationMode);
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum DestinationShorthand {
@@ -325,8 +302,6 @@ pub enum DestinationShorthand {
     AllIncludingSelff = 0b10,
     AllExcludingSelff = 0b11,
 }
-
-bitenum_field!(InterruptCommand.destination_shorthand: DestinationShorthand);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
@@ -339,7 +314,7 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct DestinationFormat(u32);
 
-    field model_raw: usize => 28..32;
+    pub field model: Model => 28..32;
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -347,8 +322,6 @@ pub enum Model {
     Cluster = 0b0000,
     Flat = 0b1111,
 }
-
-bitenum_field!(DestinationFormat.model: Model);
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]

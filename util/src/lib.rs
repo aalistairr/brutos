@@ -34,3 +34,7 @@ impl<F: FnOnce()> Guard<F> {
         core::mem::forget(self);
     }
 }
+
+pub trait ConvertRepr {
+    type Repr;
+}
