@@ -3,8 +3,8 @@ use proc_macro2::Span;
 use quote::{format_ident, quote, ToTokens};
 use syn::parse::{Parse, ParseStream, Result};
 use syn::{
-    braced, parse_macro_input, BinOp, Error, Expr, ExprBinary, ExprLit, ExprParen, ExprRepeat,
-    Fields, Ident, ItemStruct, Lit, LitInt, Path, Token, Type, Visibility,
+    braced, bracketed, parse_macro_input, BinOp, Error, Expr, ExprBinary, ExprLit, ExprParen,
+    ExprRepeat, Fields, Ident, ItemStruct, Lit, LitInt, Path, Token, Type, Visibility,
 };
 
 struct BitfieldMacroInput {
@@ -24,6 +24,7 @@ impl Parse for BitfieldMacroInput {
 }
 
 struct Field {
+    is_ro: bool,
     vis: Visibility,
     name: Ident,
     ty: Type,
@@ -32,6 +33,19 @@ struct Field {
 
 impl Parse for Field {
     fn parse(input: ParseStream) -> Result<Field> {
+        let mut is_ro = false;
+        while let Ok(_) = input.parse::<Token![#]>() {
+            let content;
+            bracketed!(content in input);
+            let ident: Ident = content.parse()?;
+            if ident == "ro" {
+                is_ro = true;
+            } else {
+                panic!("unknown attribute");
+            }
+            assert!(content.is_empty());
+        }
+
         let vis = input.parse()?;
         let field_token = input.parse::<Ident>()?;
         if field_token != "field" {
@@ -75,6 +89,7 @@ impl Parse for Field {
         };
 
         Ok(Field {
+            is_ro,
             vis,
             name,
             ty,
@@ -226,16 +241,20 @@ impl ToTokens for BoolField {
                 #self_assert_inbounds
                 (self.0 #array_index >> #bit_index) & 1 == 1
             }
-
-            #vis const fn #setter_name(&mut self, value: bool) {
-                self.0 #array_index = (self.0 #array_index & !(1 << #bit_index)) | (if value { 1 } else { 0 } << #bit_index);
-            }
-
-            #vis const fn #with_name(mut self, value: bool) -> Self {
-                self.#setter_name(value);
-                self
-            }
         });
+
+        if !self.0.is_ro {
+            tokens.extend(quote! {
+                #vis const fn #setter_name(&mut self, value: bool) {
+                    self.0 #array_index = (self.0 #array_index & !(1 << #bit_index)) | (if value { 1 } else { 0 } << #bit_index);
+                }
+
+                #vis const fn #with_name(mut self, value: bool) -> Self {
+                    self.#setter_name(value);
+                    self
+                }
+            });
+        }
     }
 }
 
@@ -386,39 +405,43 @@ impl ToTokens for UintField {
                 )*
                 #to_value
             }
-
-            #vis const fn #setter_name(&mut self, value: #ty) {
-                const fn __value_mask(r: core::ops::Range<u32>) -> #value_nt {
-                    const N_BITS: u32 = (core::mem::size_of::<#value_nt>() * 8) as u32;
-                    assert!(r.end <= N_BITS && r.start < N_BITS && r.start <= r.end);
-                    if r.end - r.start == N_BITS {
-                        !0
-                    } else {
-                        ((1 << (r.end - r.start)) - 1) << r.start
-                    }
-                }
-
-                let value = #from_value;
-
-                {
-                    #value_is_zero_fn
-                    let mut tmp = value;
-                    #(tmp #value_array_index &= !__value_mask(#value_bits_start..#value_bits_end);)*
-                    assert!(value_is_zero(tmp));
-                }
-
-                #(self.0 #self_array_index =
-                    (self.0 #self_array_index & !Self::__self_mask(#self_bits_start..#self_bits_end))
-                        | ((((value #value_array_index & __value_mask(#value_bits_start..#value_bits_end))
-                            >> #value_bits_start) as #self_nt) << #self_bits_start);
-                )*
-            }
-
-            #vis const fn #with_name(mut self, value: #ty) -> Self {
-                self.#setter_name(value);
-                self
-            }
         });
+
+        if !self.0.is_ro {
+            tokens.extend(quote! {
+                #vis const fn #setter_name(&mut self, value: #ty) {
+                    const fn __value_mask(r: core::ops::Range<u32>) -> #value_nt {
+                        const N_BITS: u32 = (core::mem::size_of::<#value_nt>() * 8) as u32;
+                        assert!(r.end <= N_BITS && r.start < N_BITS && r.start <= r.end);
+                        if r.end - r.start == N_BITS {
+                            !0
+                        } else {
+                            ((1 << (r.end - r.start)) - 1) << r.start
+                        }
+                    }
+
+                    let value = #from_value;
+
+                    {
+                        #value_is_zero_fn
+                        let mut tmp = value;
+                        #(tmp #value_array_index &= !__value_mask(#value_bits_start..#value_bits_end);)*
+                        assert!(value_is_zero(tmp));
+                    }
+
+                    #(self.0 #self_array_index =
+                        (self.0 #self_array_index & !Self::__self_mask(#self_bits_start..#self_bits_end))
+                            | ((((value #value_array_index & __value_mask(#value_bits_start..#value_bits_end))
+                                >> #value_bits_start) as #self_nt) << #self_bits_start);
+                    )*
+                }
+
+                #vis const fn #with_name(mut self, value: #ty) -> Self {
+                    self.#setter_name(value);
+                    self
+                }
+            });
+        }
     }
 }
 

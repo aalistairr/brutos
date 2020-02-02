@@ -192,7 +192,7 @@ bitfield! {
     pub struct Timer(u32);
 
     pub field vector: u8 => 0..8;
-    pub field delivery_status: DeliveryStatus => 12;
+    #[ro] pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
     pub field timer_mode: TimerMode => 17..19;
 }
@@ -210,7 +210,7 @@ bitfield! {
 
     pub field vector: u8 => 0..8;
     pub field delivery_mode_raw: DeliveryMode => 8..11;
-    pub field delivery_status: DeliveryStatus => 12;
+    #[ro] pub field delivery_status: DeliveryStatus => 12;
     pub field interrupt_input_pin_polarity: PinPolarity => 13;
     pub field remote_irr: bool => 14;
     pub field trigger_mode: TriggerMode => 15;
@@ -229,7 +229,7 @@ bitfield! {
 
     pub field vector: u8 => 0..8;
     pub field delivery_mode: DeliveryMode => 8..11;
-    pub field delivery_status: DeliveryStatus => 12;
+    #[ro] pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
 }
 
@@ -238,7 +238,7 @@ bitfield! {
     pub struct ErrorRegister(u32);
 
     pub field vector: u8 => 0..8;
-    pub field delivery_status: DeliveryStatus => 12;
+    #[ro] pub field delivery_status: DeliveryStatus => 12;
     pub field masked: bool => 16;
 }
 
@@ -282,7 +282,7 @@ bitfield! {
     pub field vector: u8 => 0[0..8];
     pub field delivery_mode: DeliveryMode => 0[8..11];
     pub field destination_mode: DestinationMode => 0[11];
-    pub field delivery_status: DeliveryStatus => 0[12];
+    #[ro] pub field delivery_status: DeliveryStatus => 0[12];
     pub field level_assert: bool => 0[14];
     pub field trigger_mode: TriggerMode => 0[15];
     pub field destination_shorthand: DestinationShorthand => 0[18..20];
