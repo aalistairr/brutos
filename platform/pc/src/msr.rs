@@ -86,12 +86,6 @@ bitfield! {
 
     pub field syscall_enabled: bool => 0;
     pub field ia32_enabled: bool => 8;
-    field ia32_active_raw: bool => 10;
+    #[ro] pub field ia32_active: bool => 10;
     pub field nx_enabled: bool => 11;
-}
-
-impl Efer {
-    pub fn is_ia32_active(&self) -> bool {
-        self.is_ia32_active_raw()
-    }
 }
