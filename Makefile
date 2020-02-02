@@ -10,13 +10,13 @@ endif
 BUILD_DIR ?= target/$(TARGET)/$(CFG)
 
 
-$(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S kernel/src/arch/x86_64/interrupt/handlers.rs
+$(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S kernel/src/arch/x86_64/interrupt/entry.rs
 	xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS) -- -C link-arg=-Tkernel/$(ARCH).lds -C link-arg=-n
 
 kernel/src/arch/x86_64/page_tables.S: kernel/src/arch/x86_64/page_tables.py
 	python3 $^ > $@
 
-kernel/src/arch/x86_64/interrupt/handlers.rs: kernel/src/arch/x86_64/interrupt/handlers.py
+kernel/src/arch/x86_64/interrupt/entry.rs: kernel/src/arch/x86_64/interrupt/entry.py
 	python3 $^ > $@
 
 

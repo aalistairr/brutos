@@ -3,9 +3,7 @@ use core::pin::Pin;
 use brutos_platform_pc as pc;
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
 
-pub mod handlers;
-
-use self::handlers::vectors::*;
+pub mod entry;
 
 macro_rules! alias {
     ($to:ident: $($from:ident),*) => {
@@ -77,12 +75,11 @@ pub unsafe fn initialize() {
     let mut idt = idt_mut();
     for i in 0..256 {
         idt[i] = Descriptor::new()
-            .with_offset(self::handlers::HANDLERS[i] as usize)
+            .with_offset(self::entry::ENTRY_FUNCTIONS[i] as usize)
             .with_segment(brutos_task::arch::GDT_CODE_KERN)
             .with_ty(Type::Interrupt)
             .with_present(true);
     }
-    idt[PAGE_FAULT].set_ty(Type::Trap);
 
     Idt::load(idt.as_ref());
 
