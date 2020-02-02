@@ -2,6 +2,8 @@ use brutos_alloc::OutOfMemory;
 use brutos_memory::{AllocPhysPage, Order, PhysAddr};
 use brutos_multiboot2::ffi::BootInfo;
 use brutos_multiboot2::{MmapEntryTy, Tag};
+use brutos_platform_pc as pc;
+use brutos_sync::spinlock::Spinlock;
 use brutos_task as task;
 
 use crate::Cx;
@@ -9,10 +11,10 @@ use crate::Cx;
 pub const VMA_OFFSET: usize = 0xffffffff80000000;
 
 pub mod entry;
-pub mod framebuffer;
 pub mod interrupt;
-pub mod io;
 pub mod memory;
+#[cfg(not(test))]
+pub mod panic;
 
 pub fn halt() -> ! {
     loop {
@@ -25,6 +27,12 @@ pub fn halt() -> ! {
     }
 }
 
+pub static SCREEN: Spinlock<pc::fb::Screen, Cx> = unsafe {
+    Spinlock::new(pc::fb::Screen::with_framebuffer({
+        (pc::fb::FRAMEBUFFER_ADDR + VMA_OFFSET) as *mut _
+    }))
+};
+
 pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
     let mut dummy_state = task::State::<crate::Cx>::dummy();
     let dummy_state = unsafe { core::pin::Pin::new_unchecked(&mut dummy_state) };
@@ -36,7 +44,7 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
         self::interrupt::initialize();
     }
 
-    self::framebuffer::Screen::lock().clear();
+    self::SCREEN.lock().clear();
 
     let multiboot_info = (multiboot_info_addr.0 + memory::PHYS_IDENT_OFFSET) as *const BootInfo;
     let multiboot_info = unsafe { &*multiboot_info };
@@ -72,7 +80,11 @@ macro_rules! println {
 
 #[macro_export]
 macro_rules! print {
-    ($($arg:tt)*) => ($crate::arch::framebuffer::print(core::format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::arch::print(core::format_args!($($arg)*)));
+}
+
+pub fn print(args: core::fmt::Arguments) {
+    core::fmt::Write::write_fmt(&mut *SCREEN.lock(), args).expect("failed to write");
 }
 
 unsafe impl brutos_memory::vm::mmu::arch::Context for Cx {

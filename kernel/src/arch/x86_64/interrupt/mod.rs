@@ -1,8 +1,7 @@
 use core::pin::Pin;
 
+use brutos_platform_pc as pc;
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
-
-use crate::arch::x86_64::io;
 
 pub mod handlers;
 
@@ -72,13 +71,8 @@ unsafe fn idt_mut() -> Pin<&'static mut Idt> {
     Pin::new_unchecked(&mut IDT)
 }
 
-unsafe fn disable_pic() {
-    io::outb(0xa1, 0xff);
-    io::outb(0x21, 0xff);
-}
-
 pub unsafe fn initialize() {
-    disable_pic();
+    pc::interrupt::disable_pic();
 
     let mut idt = idt_mut();
     for i in 0..256 {

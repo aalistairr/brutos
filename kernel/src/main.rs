@@ -1,4 +1,5 @@
 #![feature(asm, global_asm, naked_functions)]
+#![feature(const_raw_ptr_deref, const_mut_refs)]
 #![no_std]
 #![no_main]
 
@@ -16,8 +17,6 @@ use brutos_task::Task;
 #[macro_use]
 pub mod arch;
 pub mod memory;
-#[cfg(not(test))]
-pub mod panic;
 
 pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     println!("Loading BrutOS");

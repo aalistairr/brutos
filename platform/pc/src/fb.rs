@@ -59,15 +59,18 @@ type Framebuffer = [[UnsafeCell<Character>; FB_WIDTH]; FB_HEIGHT];
 
 pub const FRAMEBUFFER_ADDR: usize = 0xb8000;
 
-pub struct Screen<'a> {
-    framebuffer: &'a Framebuffer,
+pub struct Screen {
+    framebuffer: *mut Framebuffer,
     pub style: Style,
     x: usize,
     y: usize,
 }
 
-impl<'a> Screen<'a> {
-    pub fn with_framebuffer(framebuffer: &'a Framebuffer) -> Screen<'a> {
+unsafe impl Send for Screen {}
+unsafe impl Sync for Screen {}
+
+impl Screen {
+    pub const unsafe fn with_framebuffer(framebuffer: *mut Framebuffer) -> Screen {
         Screen {
             framebuffer,
             style: DEFAULT_STYLE,
@@ -81,7 +84,7 @@ impl<'a> Screen<'a> {
             for x in 0..FB_WIDTH {
                 unsafe {
                     ptr::write_volatile(
-                        self.framebuffer[y][x].get(),
+                        (*self.framebuffer)[y][x].get(),
                         Character {
                             value: ' ' as u8,
                             style: self.style,
@@ -106,7 +109,7 @@ impl<'a> Screen<'a> {
     fn put_character(&mut self, c: Character) {
         unsafe {
             let (x, y) = (self.x, self.y);
-            ptr::write_volatile(self.framebuffer[y][x].get(), c);
+            ptr::write_volatile((*self.framebuffer)[y][x].get(), c);
         }
         self.x += 1;
         if self.x >= FB_WIDTH {
@@ -123,8 +126,8 @@ impl<'a> Screen<'a> {
         for y in 0..FB_HEIGHT - 1 {
             for x in 0..FB_WIDTH {
                 unsafe {
-                    let c = ptr::read(self.framebuffer[y + 1][x].get());
-                    ptr::write_volatile(self.framebuffer[y][x].get(), c);
+                    let c = ptr::read((*self.framebuffer)[y + 1][x].get());
+                    ptr::write_volatile((*self.framebuffer)[y][x].get(), c);
                 }
             }
         }
@@ -141,7 +144,7 @@ impl<'a> Screen<'a> {
     }
 }
 
-impl<'a> core::fmt::Write for Screen<'a> {
+impl core::fmt::Write for Screen {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
         for c in s.chars() {
             match c {
