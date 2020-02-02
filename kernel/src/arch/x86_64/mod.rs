@@ -8,8 +8,6 @@ use brutos_task as task;
 
 use crate::Cx;
 
-pub const VMA_OFFSET: usize = 0xffffffff80000000;
-
 pub mod entry;
 pub mod interrupt;
 pub mod memory;
@@ -29,7 +27,7 @@ pub fn halt() -> ! {
 
 pub static SCREEN: Spinlock<pc::fb::Screen, Cx> = unsafe {
     Spinlock::new(pc::fb::Screen::with_framebuffer({
-        (pc::fb::FRAMEBUFFER_ADDR + VMA_OFFSET) as *mut _
+        (pc::fb::FRAMEBUFFER_ADDR + memory::PHYS_IDENT_OFFSET) as *mut _
     }))
 };
 
