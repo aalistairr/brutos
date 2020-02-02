@@ -32,3 +32,11 @@ pub unsafe fn disable_pic() {
         }
     }
 }
+
+pub unsafe fn cli() {
+    asm!("cli" :::: "volatile");
+}
+
+pub unsafe fn sti() {
+    asm!("sti" :::: "volatile");
+}

@@ -83,13 +83,5 @@ pub unsafe fn initialize() {
 
     Idt::load(idt.as_ref());
 
-    sti();
-}
-
-pub unsafe fn cli() {
-    asm!("cli" :::: "volatile");
-}
-
-pub unsafe fn sti() {
-    asm!("sti" :::: "volatile");
+    pc::interrupt::sti();
 }
