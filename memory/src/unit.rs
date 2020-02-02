@@ -1,11 +1,25 @@
 use core::fmt;
 use core::ops::{Add, Sub};
 
-use brutos_util::UInt;
+use brutos_util::{ConvertRepr, UInt};
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]
 pub struct PhysAddr(pub usize);
+
+impl ConvertRepr for PhysAddr {
+    type Repr = usize;
+}
+
+impl PhysAddr {
+    pub const fn from_repr(repr: usize) -> Option<PhysAddr> {
+        Some(PhysAddr(repr))
+    }
+
+    pub const fn into_repr(self) -> usize {
+        self.0
+    }
+}
 
 impl fmt::Debug for PhysAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -63,6 +77,20 @@ impl PhysAddr {
 #[repr(transparent)]
 pub struct VirtAddr(pub usize);
 
+impl ConvertRepr for VirtAddr {
+    type Repr = usize;
+}
+
+impl VirtAddr {
+    pub const fn from_repr(repr: usize) -> Option<VirtAddr> {
+        Some(VirtAddr(repr))
+    }
+
+    pub const fn into_repr(self) -> usize {
+        self.0
+    }
+}
+
 impl fmt::Debug for VirtAddr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "{:#x}", self.0)
@@ -118,6 +146,20 @@ impl VirtAddr {
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash, Debug)]
 #[repr(transparent)]
 pub struct Order(pub u8);
+
+impl ConvertRepr for Order {
+    type Repr = u8;
+}
+
+impl Order {
+    pub const fn from_repr(repr: u8) -> Option<Order> {
+        Some(Order(repr))
+    }
+
+    pub const fn into_repr(self) -> u8 {
+        self.0
+    }
+}
 
 impl Order {
     pub const fn size(&self) -> usize {

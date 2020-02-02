@@ -6,12 +6,12 @@ use core::ptr;
 use crate::{Order, PhysAddr, VirtAddr};
 use brutos_alloc::OutOfMemory;
 use brutos_util::uint::UInt;
-use brutos_util_macros::bitfield;
+use brutos_util_macros::{bitfield, BitfieldNew};
 
 use super::super::{Flags, MapError, PageSize, UnmapError};
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Default)]
+    #[derive(Copy, Clone, PartialEq, Eq, Default, BitfieldNew)]
     pub struct Entry(usize);
 
     pub field present: bool => 0;
@@ -22,27 +22,11 @@ bitfield! {
     pub field global: bool => 8;
     pub field cache_disabled: bool => 4;
     pub field writethrough: bool => 3;
-    field address_raw: usize { 12..48 => 12..48 }
+    pub field address: PhysAddr { 12..48 => 12..48 }
     pub field population: usize => 52..52 + 11;
 }
 
 impl Entry {
-    pub const fn new() -> Self {
-        Entry(0)
-    }
-
-    pub const fn address(&self) -> PhysAddr {
-        PhysAddr(self.address_raw())
-    }
-
-    pub const fn set_address(&mut self, addr: PhysAddr) {
-        self.set_address_raw(addr.0)
-    }
-    pub const fn with_address(mut self, addr: PhysAddr) -> Self {
-        self.set_address(addr);
-        self
-    }
-
     pub fn with_inc_population(self) -> Self {
         self.with_population(self.population() + 1)
     }
