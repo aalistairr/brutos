@@ -23,7 +23,8 @@ bitfield! {
     pub field cache_disabled: bool => 4;
     pub field writethrough: bool => 3;
     pub field address: PhysAddr { 12..48 => 12..48 }
-    pub field population: usize => 52..52 + 11;
+    pub field population: usize => 52..52 + 10;
+    pub field permanent: bool => 52 + 10 + 1;
 }
 
 impl Entry {
@@ -105,6 +106,22 @@ fn addr_bits(lvl: Level) -> Range<u32> {
 
 fn entry_size(lvl: Level) -> usize {
     1 << addr_bits(lvl).start
+}
+
+impl Level {
+    pub fn entry_size(&self) -> usize {
+        entry_size(*self)
+    }
+
+    pub fn down(&self) -> Level {
+        match self {
+            Level::Pt => panic!(),
+            Level::Pd => Level::Pt,
+            Level::Pdp => Level::Pd,
+            Level::Pml4 => Level::Pdp,
+            Level::Root => Level::Pml4,
+        }
+    }
 }
 
 fn table_index(lvl: Level, addr: VirtAddr) -> usize {
@@ -257,7 +274,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
         ) -> bool {
             let entry = entry_cell.load_nonvolatile();
             if entry.is_present() {
-                if is_ps(entry) || entry.population() > 0 {
+                if is_ps(entry) || entry.population() > 0 || entry.is_permanent() {
                     return true;
                 }
                 entry_cell.store(Entry::new());
@@ -474,6 +491,46 @@ pub fn compare_and_swap<Cx: Context>(
 
     invlpg(virt_addr);
     Ok(true)
+}
+
+pub unsafe fn create_permanent_table<Cx: Context>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    virt_addr: VirtAddr,
+    lvl: Level,
+) -> Result<(), MapError> {
+    assert!(lvl < Level::Root);
+    assert!(lvl > Level::Pt);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+    let mut trail = Trail::<_, true, true>::new(cx, root);
+    let (_, parent_entry_cell) = trail.find_entry(lvl.down(), virt_addr)?;
+    parent_entry_cell
+        .unwrap()
+        .map_nonvolatile(|e| e.with_permanent(true));
+    Ok(())
+}
+
+pub unsafe fn make_nonpermanent<Cx: Context>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    virt_addr: VirtAddr,
+    lvl: Level,
+) -> Result<(), UnmapError> {
+    assert!(lvl < Level::Root);
+    assert!(lvl > Level::Pt);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+    let mut trail = Trail::<_, false, false>::new(cx, root);
+    let (_, parent_entry_cell) = trail
+        .find_entry(lvl.down(), virt_addr)
+        .map_err(|e| match e {
+            MapError::OutOfMemory => unreachable!(),
+            MapError::NotAllocated => UnmapError::NotAllocated,
+            MapError::Obstructed => UnmapError::Obstructed,
+        })?;
+    parent_entry_cell
+        .unwrap()
+        .map_nonvolatile(|e| e.with_permanent(false));
+    Ok(())
 }
 
 #[cfg(target_os = "bare")]

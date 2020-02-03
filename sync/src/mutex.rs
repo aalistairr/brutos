@@ -66,6 +66,10 @@ impl<T, Cx: waitq::Context> Mutex<T, Cx> {
             None => self.is_locked.store(false, Ordering::Release),
         }
     }
+
+    pub fn into_inner(this: Self) -> T {
+        UnsafeCell::into_inner(this.data)
+    }
 }
 
 pub struct MutexGuard<'a, T, Cx: waitq::Context> {

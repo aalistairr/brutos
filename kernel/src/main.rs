@@ -1,5 +1,6 @@
 #![feature(asm, global_asm, naked_functions)]
 #![feature(const_raw_ptr_deref, const_mut_refs)]
+#![feature(maybe_uninit_extra)]
 #![no_std]
 #![no_main]
 
@@ -11,7 +12,7 @@ use core::sync::atomic::AtomicBool;
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
 use brutos_memory::slab_alloc as slab;
 use brutos_memory::{AllocMappedPage, AllocPhysPage, Order, PhysAddr, VirtAddr};
-use brutos_sync::mutex::PinMutex;
+use brutos_sync::mutex::{Mutex, PinMutex};
 use brutos_task::Task;
 
 #[macro_use]
@@ -21,8 +22,12 @@ pub mod memory;
 pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     println!("Loading BrutOS");
     memory::initialize();
+    initialize_task_allocator();
+    initialize_mapping_allocator();
+    initialize_addr_space_allocator();
     let available_memory = memory::bootstrap(mmap).expect("Failed to bootstrap physical memory");
     println!("{} bytes available", available_memory);
+    create_kernel_address_space().expect("failed to create kernel address space");
     unimplemented!()
 }
 
@@ -126,15 +131,57 @@ macro_rules! slab_allocator {
 }
 
 slab_allocator!(task_allocator, 1, ArcInner<Task<Cx>>);
+fn initialize_task_allocator() {
+    task_allocator().initialize();
+    task_allocator().lock().as_mut().initialize();
+}
 slab_allocator!(
     mapping_allocator,
     1,
     ArcInner<brutos_memory::vm::Mapping<Cx>>
 );
+fn initialize_mapping_allocator() {
+    mapping_allocator().initialize();
+    mapping_allocator().lock().as_mut().initialize();
+}
 slab_allocator!(addr_space_allocator, 1, ArcInner<AddressSpace>);
+fn initialize_addr_space_allocator() {
+    addr_space_allocator().initialize();
+    addr_space_allocator().lock().as_mut().initialize();
+}
 
 pub struct AddressSpace {
-    _vm: brutos_memory::vm::Space<Cx>,
+    vm: brutos_memory::vm::Space<Cx>,
+}
+
+static mut KERNEL_ADDR_SPACE: core::mem::MaybeUninit<Pin<Arc<AddressSpace, Cx>>> =
+    core::mem::MaybeUninit::uninit();
+
+unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
+    let addr_space = KERNEL_ADDR_SPACE.write(
+        Arc::pin(AddressSpace {
+            vm: brutos_memory::vm::Space::new(
+                crate::arch::memory::KERNEL_ADDR_SPACE_RANGE,
+                crate::arch::memory::create_kernel_mmu_tables()?,
+            ),
+        })
+        .map_err(|(e, space)| {
+            crate::arch::memory::destroy_kernel_mmu_tables(Mutex::into_inner(space.vm.mmu_tables));
+            e
+        })?,
+    );
+    addr_space.vm().initialize();
+    Ok(())
+}
+
+impl AddressSpace {
+    pub unsafe fn kernel() -> &'static Pin<Arc<AddressSpace, Cx>> {
+        &*KERNEL_ADDR_SPACE.as_ptr()
+    }
+
+    pub fn vm<'a>(self: &'a Pin<Arc<AddressSpace, Cx>>) -> Pin<&'a brutos_memory::vm::Space<Cx>> {
+        unsafe { self.as_ref().map_unchecked(|x| &x.vm) }
+    }
 }
 
 impl brutos_task::Context for Cx {

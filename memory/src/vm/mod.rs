@@ -160,6 +160,8 @@ where
     }
 
     pub fn initialize(self: Pin<&Self>) {
+        self.mappings().initialize();
+        self.mmu_tables().initialize();
         self.mappings().lock().as_mut().initialize();
     }
 

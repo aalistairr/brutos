@@ -46,7 +46,7 @@ pub struct Flags {
 }
 
 pub struct Tables {
-    root: self::arch::EntryCell,
+    pub root: self::arch::EntryCell,
 }
 
 impl Tables {
