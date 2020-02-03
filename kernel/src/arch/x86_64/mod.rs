@@ -37,9 +37,9 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
     unsafe {
         task::State::activate(dummy_state);
         task::arch::current_task_inc_critical_count();
-
         task::arch::load_gdt();
         self::interrupt::initialize();
+        task::arch::current_task_dec_critical_count();
     }
 
     self::SCREEN.lock().clear();

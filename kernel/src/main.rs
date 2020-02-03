@@ -36,7 +36,7 @@ unsafe impl brutos_sync::Critical for Cx {
 
     unsafe fn leave_critical() {
         if brutos_task::arch::current_task_dec_critical_count() {
-            unimplemented!()
+            self::arch::interrupt::enable();
         }
     }
 }

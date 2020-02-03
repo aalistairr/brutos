@@ -2,6 +2,7 @@ use core::pin::Pin;
 
 use brutos_platform_pc as pc;
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
+use brutos_task::arch::GDT_CODE_KERN;
 
 pub mod entry;
 
@@ -42,7 +43,7 @@ alias! { kill:
 }
 
 #[export_name = "int_handler_panic"]
-pub extern "C" fn panic(vector: usize, cs: usize, error: usize) {
+pub extern "C" fn panic(vector: usize, cs: u16, error: usize) {
     panic!(
         "don't know how to handle interrupt (vector={}, cs={:#x}, error={:#x})",
         vector, cs, error
@@ -50,17 +51,30 @@ pub extern "C" fn panic(vector: usize, cs: usize, error: usize) {
 }
 
 #[export_name = "int_handler_kill"]
-pub extern "C" fn kill(_vector: usize, _cs: usize, _error: usize) {
+pub extern "C" fn kill(vector: usize, cs: u16, error: usize) {
+    if cs == GDT_CODE_KERN {
+        panic!(
+            "fatal exception in kernel (vector={}, error={:#x})",
+            vector, error
+        );
+    }
     unimplemented!()
 }
 
 #[export_name = "int_handler_page_fault"]
-pub extern "C" fn page_fault(_vector: usize, _cs: usize, _error: usize) {
+pub extern "C" fn page_fault(_vector: usize, _cs: u16, _error: usize) {
+    let critical_count = unsafe { brutos_task::arch::current_task_get_critical_count() };
+    if critical_count > 0 {
+        panic!("page fault in a critical section");
+    }
+    unsafe {
+        pc::interrupt::sti();
+    }
     unimplemented!()
 }
 
 #[export_name = "int_handler_any"]
-pub extern "C" fn any(_vector: usize, _cs: usize, _error: usize) {
+pub extern "C" fn any(_vector: usize, _cs: u16, _error: usize) {
     unimplemented!()
 }
 
@@ -83,5 +97,9 @@ pub unsafe fn initialize() {
 
     Idt::load(idt.as_ref());
 
+    enable();
+}
+
+pub unsafe fn enable() {
     pc::interrupt::sti();
 }

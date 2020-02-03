@@ -19,6 +19,13 @@ pub unsafe fn current_task_dec_critical_count() -> bool {
     is_zero
 }
 
+#[inline]
+pub unsafe fn current_task_get_critical_count() -> usize {
+    let count: usize;
+    asm!("mov %gs:0xc0, $0" : "=r" (count));
+    count
+}
+
 impl<Cx: Context> Task<Cx> {
     #[inline]
     pub unsafe fn current_task() -> *const Task<Cx> {
