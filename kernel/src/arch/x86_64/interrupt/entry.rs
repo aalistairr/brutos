@@ -3734,7 +3734,6 @@ pub unsafe fn interrupt_x_entry() {
         push %r11
 
         mov 0x50(%rsp), %rsi
-
         cmpq $$8, %rsi
         je 1f
         swapgs
@@ -3743,7 +3742,7 @@ pub unsafe fn interrupt_x_entry() {
         call *%rax
         cli
 
-        cmpq $$8, %rsi
+        cmpq $$8, 0x50(%rsp)
         je 1f
         swapgs
     1:

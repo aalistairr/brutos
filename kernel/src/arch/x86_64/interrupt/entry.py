@@ -142,8 +142,7 @@ i(f'push %r10')  # +0x08
 i(f'push %r11')  # +0x00
 # --- (aligned to 0x10)
 n()
-i(f'mov 0x50(%rsp), %rsi')  # %rsi = CS
-n()
+i(f'mov 0x50(%rsp), %rsi')  # (arg 1: CS)
 i(f'cmpq $${GDT_CODE_KERN}, %rsi')
 i(f'je 1f')
 i(f'swapgs')
@@ -152,7 +151,7 @@ n()
 i(f'call *%rax')
 i(f'cli')
 n()
-i(f'cmpq $${GDT_CODE_KERN}, %rsi')
+i(f'cmpq $${GDT_CODE_KERN}, 0x50(%rsp)')
 i(f'je 1f')
 i(f'swapgs')
 l(f'1:')
