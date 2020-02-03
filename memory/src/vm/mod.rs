@@ -50,7 +50,7 @@ where
     status_condvar: Condvar<Cx>,
     src: Source,
     page_size: mmu::PageSize,
-    flags: mmu::Flags,
+    mmu_flags: mmu::Flags,
 }
 
 #[derive(Clone)]
@@ -77,6 +77,12 @@ impl Status {
             _ => false,
         }
     }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub struct Flags {
+    pub mapping: mappings::Flags,
+    pub mmu: mmu::Flags,
 }
 
 pub struct MappingWasDestroyed;
@@ -163,7 +169,7 @@ where
         at: Location,
         src: Source,
         page_size: mmu::PageSize,
-        flags: mmu::Flags,
+        flags: Flags,
     ) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, MapError> {
         assert!(size.is_aligned(page_size.order().size()));
         match at {
@@ -177,12 +183,13 @@ where
             .create(
                 size,
                 at,
+                flags.mapping,
                 MappingData {
                     status: Mutex::new(Status::Ready),
                     status_condvar: Condvar::new(),
                     src,
                     page_size,
-                    flags,
+                    mmu_flags: flags.mmu,
                 },
             )?
             .clone())
@@ -225,7 +232,7 @@ where
     ) -> Result<(PhysAddr, mmu::Flags), FillError<<Cx as MapPhysPage>::Err>> {
         let mut cx = Cx::default();
         match mapping.src {
-            Source::Raw(addr) => Ok((addr + offset, mapping.flags)),
+            Source::Raw(addr) => Ok((addr + offset, mapping.mmu_flags)),
             Source::Private(Object::Anonymous) => {
                 match cx.shared_empty_page(mapping.page_size.order()) {
                     Some((page, page_data)) => {
@@ -234,7 +241,7 @@ where
                             page,
                             mmu::Flags {
                                 writable: false,
-                                ..mapping.flags
+                                ..mapping.mmu_flags
                             },
                         ))
                     }
@@ -251,7 +258,7 @@ where
                                 .map_err(FillError::MapPhysPage)?;
                         }
                         page_guard.success();
-                        Ok((page, mapping.flags))
+                        Ok((page, mapping.mmu_flags))
                     }
                 }
             }
@@ -326,7 +333,7 @@ where
                     ro_page,
                     mapping.page_size,
                     false,
-                    mapping.flags,
+                    mapping.mmu_flags,
                 )
                 .unwrap()
                 .unwrap();
@@ -357,7 +364,7 @@ where
                 mapping.page_size,
                 ro_entry,
                 new_page,
-                mapping.flags,
+                mapping.mmu_flags,
             )?;
 
             ro_page_refcount_guard.success();
@@ -391,15 +398,15 @@ where
         do_busy_work(mapping.as_ref(), || match fault_conditions {
             FaultConditions {
                 was_write: true, ..
-            } if !mapping.flags.writable => Err(PageFaultError::InvalidAccess),
+            } if !mapping.mmu_flags.writable => Err(PageFaultError::InvalidAccess),
             FaultConditions {
                 was_instruction_fetch: true,
                 ..
-            } if !mapping.flags.executable => Err(PageFaultError::InvalidAccess),
+            } if !mapping.mmu_flags.executable => Err(PageFaultError::InvalidAccess),
             FaultConditions {
                 was_user_access: true,
                 ..
-            } if !mapping.flags.user_accessible => Err(PageFaultError::InvalidAccess),
+            } if !mapping.mmu_flags.user_accessible => Err(PageFaultError::InvalidAccess),
 
             FaultConditions {
                 was_present: false, ..

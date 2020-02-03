@@ -56,6 +56,10 @@ impl PhysAddr {
         self.0.checked_add(other).map(PhysAddr)
     }
 
+    pub fn checked_sub(self, other: usize) -> Option<PhysAddr> {
+        self.0.checked_sub(other).map(PhysAddr)
+    }
+
     pub fn is_aligned(self, align: usize) -> bool {
         self.0.is_aligned(align)
     }
@@ -124,6 +128,10 @@ impl Sub<VirtAddr> for VirtAddr {
 impl VirtAddr {
     pub fn checked_add(self, other: usize) -> Option<VirtAddr> {
         self.0.checked_add(other).map(VirtAddr)
+    }
+
+    pub fn checked_sub(self, other: usize) -> Option<VirtAddr> {
+        self.0.checked_sub(other).map(VirtAddr)
     }
 
     pub fn is_aligned(self, align: usize) -> bool {
