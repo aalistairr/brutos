@@ -1,5 +1,6 @@
 GDT_CODE_KERN = 8
 ERROR_CODE_VECTORS = [8, 10, 11, 12, 13, 14, 17, 21]
+NMI_VECTOR = 2
 HANDLERS = {
     0: 'divide_error',
     1: 'debug_exception',
@@ -74,7 +75,7 @@ def emit():
     print(f"""
 #[naked]
 #[no_mangle]
-pub unsafe fn {fn_name}() {{
+pub unsafe extern "C" fn {fn_name}() {{
     asm!("\n{asm}{INDENT}" :::: "volatile");
 }}
 """)
@@ -88,7 +89,7 @@ for (vector, name) in HANDLERS.items():
 print('}')
 print()
 
-print(f'pub const ENTRY_FUNCTIONS: [unsafe fn(); 256] = [')
+print(f'pub const ENTRY_FUNCTIONS: [unsafe extern "C" fn(); 256] = [')
 for vector in range(0, 256):
     if not is_reserved(vector):
         print(f'{INDENT}interrupt_{vector}_entry,')
@@ -103,6 +104,8 @@ i(f'cli')
 i(f'hlt')
 emit()
 
+function(f'interrupt_entry_functions')
+l(f'interrupt_entry_unswapped_gs_prefix_start:')
 for vector in range(0, 256):
     if is_reserved(vector):
         continue
@@ -110,7 +113,8 @@ for vector in range(0, 256):
     if handler == None:
         handler = "any"
 
-    function(f'interrupt_{vector}_entry')
+    l(f'.global interrupt_{vector}_entry')
+    l(f'interrupt_{vector}_entry:')
     if vector in ERROR_CODE_VECTORS:
         i(f'xchg (%rsp), %rdx')
     else:
@@ -119,8 +123,10 @@ for vector in range(0, 256):
     i(f'push %rax')
     i(f'mov $${vector}, %rdi')
     i(f'mov $$int_handler_{handler}, %rax')
-    i(f'jmp interrupt_x_entry')
-    emit()
+    if vector != NMI_VECTOR:
+        i(f'jmp interrupt_x_entry')
+    else:
+        i(f'jmp interrupt_nmi_entry')
 
 # stack layout:
 # --- (aligned to 0x10)
@@ -133,7 +139,7 @@ for vector in range(0, 256):
 #   %rdi                +0x38   (arg 0: vector)
 #   %rax                +0x30   (handler function)
 # --- (aligned to 0x10)
-function(f'interrupt_x_entry')
+l(f'interrupt_x_entry:')
 i(f'push %rcx')  # +0x28
 i(f'push %rsi')  # +0x20
 i(f'push %r8')  # +0x18
@@ -147,12 +153,65 @@ i(f'cmpq $${GDT_CODE_KERN}, %rsi')
 i(f'je 1f')
 i(f'swapgs')
 l(f'1:')
+l(f'interrupt_entry_unswapped_gs_prefix_end:')
 n()
 i(f'call *%rax')
 i(f'cli')
 n()
 i(f'cmpq $${GDT_CODE_KERN}, 0x50(%rsp)')
 i(f'je 1f')
+i(f'swapgs')
+l(f'interrupt_entry_unswapped_gs_postfix_start:')
+l(f'1:')
+n()
+i(f'pop %r11')
+i(f'pop %r10')
+i(f'pop %r9')
+i(f'pop %r8')
+i(f'pop %rsi')
+i(f'pop %rcx')
+n()
+i(f'pop %rax')
+i(f'pop %rdi')
+i(f'pop %rdx')
+n()
+i(f'iretq')
+l(f'interrupt_entry_unswapped_gs_postfix_end:')
+n()
+n()
+
+# NMI
+l(f'interrupt_nmi_entry:')
+i(f'push %rcx')  # +0x28
+i(f'push %rsi')  # +0x20
+i(f'push %r8')  # +0x18
+i(f'push %r9')  # +0x10
+i(f'push %r10')  # +0x08
+i(f'push %r11')  # +0x00
+# --- (aligned to 0x10)
+n()
+i(f'cmpq $${GDT_CODE_KERN}, 0x50(%rsp)')
+i(f'jne 1f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_start, 0x48(%rsp)')
+i(f'jb 2f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_end, 0x48(%rsp)')
+i(f'jb 1f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_start, 0x48(%rsp)')
+i(f'jb 2f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_end, 0x48(%rsp)')
+i(f'jnb 2f')
+n()
+l(f'1:')
+i(f'swapgs')
+i(f'movb $$1, 0x53(%rsp)')  # store whether we did a swapgs above CS
+l(f'2:')
+n()
+i(f'mov 0x50(%rsp), %rsi')  # (arg 1: CS)
+i(f'call *%rax')
+n()
+i(f'testb $$1, 0x53(%rsp)')
+i(f'movb $$0, 0x53(%rsp)')
+i(f'jz 1f')
 i(f'swapgs')
 l(f'1:')
 n()
@@ -168,6 +227,12 @@ i(f'pop %rdi')
 i(f'pop %rdx')
 n()
 i(f'iretq')
+
 emit()
 
-print(asm)
+print('extern "C" {')
+for vector in range(0, 256):
+    if is_reserved(vector):
+        continue
+    print(f'{INDENT}pub fn interrupt_{vector}_entry();')
+print('}')
