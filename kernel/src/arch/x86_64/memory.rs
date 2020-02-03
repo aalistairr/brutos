@@ -1,10 +1,11 @@
+use core::mem::MaybeUninit;
 use core::ops::Range;
 use core::ptr::NonNull;
 
 use brutos_alloc::OutOfMemory;
 use brutos_memory::phys_alloc::bootstrap;
 use brutos_memory::vm::mmu;
-use brutos_memory::{PhysAddr, VirtAddr};
+use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
 
 use crate::memory::{CutRange, FailedToBootstrap};
 use crate::Cx;
@@ -114,5 +115,33 @@ pub unsafe fn destroy_kernel_mmu_tables(mut tables: mmu::Tables) {
             mmu::arch::Level::Pml4,
         )
         .expect("invalid page tables");
+    }
+}
+
+static mut SHARED_ORDER9_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
+    MaybeUninit::uninit();
+
+pub fn initialize() {
+    const FAILED: &str = "failed to allocate shared empty page";
+    let order9 = crate::memory::phys_allocator()
+        .lock()
+        .as_mut()
+        .allocate(Order(9))
+        .expect(FAILED)
+        .expect(FAILED);
+    order9.1.as_ref().inc();
+    unsafe {
+        SHARED_ORDER9_EMPTY_PAGE.write(order9);
+    }
+}
+
+impl brutos_memory::vm::Context for Cx {
+    fn shared_empty_page(&mut self, order: Order) -> Option<(PhysAddr, &Self::PageData)> {
+        if order <= Order(9) {
+            let (addr, data) = unsafe { &*SHARED_ORDER9_EMPTY_PAGE.as_ptr() };
+            Some((*addr, data))
+        } else {
+            None
+        }
     }
 }

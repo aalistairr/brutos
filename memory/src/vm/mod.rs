@@ -14,7 +14,8 @@ use crate::{Order, PhysAddr, VirtAddr};
 pub mod mappings;
 pub mod mmu;
 
-use self::mappings::{Location, MapError, UnmapError};
+pub use self::mappings::Location;
+use self::mappings::{MapError, UnmapError};
 
 pub type Mapping<Cx> = mappings::Mapping<MappingData<Cx>, Cx>;
 pub type ArcMapping<Cx> = Arc<Mapping<Cx>, Cx>;
@@ -132,6 +133,12 @@ where
 
 #[derive(Default)]
 pub struct PageRefCount(AtomicUsize);
+
+impl PageRefCount {
+    pub fn inc(&self) {
+        self.0.fetch_add(1, Ordering::SeqCst);
+    }
+}
 
 pub struct FaultConditions {
     pub was_present: bool,

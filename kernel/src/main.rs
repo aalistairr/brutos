@@ -10,10 +10,14 @@ use core::ptr::NonNull;
 use core::sync::atomic::AtomicBool;
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
+use brutos_memory::arch::PAGE_SIZE;
 use brutos_memory::slab_alloc as slab;
+use brutos_memory::vm;
 use brutos_memory::{AllocMappedPage, AllocPhysPage, Order, PhysAddr, VirtAddr};
 use brutos_sync::mutex::{Mutex, PinMutex};
 use brutos_task::Task;
+
+const STACK_SIZE: usize = 16 * PAGE_SIZE;
 
 #[macro_use]
 pub mod arch;
@@ -188,17 +192,51 @@ impl brutos_task::Context for Cx {
     type AddrSpace = Pin<Arc<AddressSpace, Cx>>;
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory> {
-        unimplemented!()
+        use vm::mappings::MapError;
+        use vm::mmu;
+        use vm::FillError;
+        let kernel = unsafe { AddressSpace::kernel() };
+        let mapping = kernel
+            .vm()
+            .create_mapping(
+                STACK_SIZE,
+                vm::Location::Aligned(PAGE_SIZE),
+                vm::Source::Private(vm::Object::Anonymous),
+                vm::mmu::PageSize::Normal,
+                vm::Flags {
+                    mapping: vm::mappings::Flags { guard_pages: true },
+                    mmu: vm::mmu::Flags {
+                        user_accessible: false,
+                        writable: true,
+                        executable: false,
+                        global: true,
+                        cache_disabled: false,
+                        writethrough: false,
+                    },
+                },
+            )
+            .map_err(|e| match e {
+                MapError::OutOfSpace
+                | MapError::OutsideSpaceRange
+                | MapError::InvalidParameters => unreachable!(),
+                MapError::OutOfMemory => OutOfMemory,
+            })?;
+        kernel.vm().prefill(mapping.as_ref()).map_err(|e| match e {
+            FillError::Map(mmu::MapError::OutOfMemory) | FillError::OutOfMemory => OutOfMemory,
+            FillError::Map(mmu::MapError::Obstructed)
+            | FillError::Map(mmu::MapError::NotAllocated)
+            | FillError::MappingWasDestroyed
+            | FillError::MapPhysPage(()) => unreachable!(),
+        })?;
+        Ok(mapping.range.end)
     }
 
-    unsafe fn dealloc_stack(&mut self, _: VirtAddr) {
-        unimplemented!()
-    }
-}
-
-impl brutos_memory::vm::Context for Cx {
-    fn shared_empty_page(&mut self, _: Order) -> Option<(PhysAddr, &Self::PageData)> {
-        unimplemented!()
+    unsafe fn dealloc_stack(&mut self, addr: VirtAddr) {
+        let kernel = AddressSpace::kernel();
+        kernel
+            .vm()
+            .remove_mapping(addr - STACK_SIZE)
+            .expect("failed to deallocate stack");
     }
 }
 
