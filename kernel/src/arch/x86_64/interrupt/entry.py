@@ -148,7 +148,7 @@ i(f'push %r10')  # +0x08
 i(f'push %r11')  # +0x00
 # --- (aligned to 0x10)
 n()
-i(f'mov 0x50(%rsp), %rsi')  # (arg 1: CS)
+i(f'lea 0x48(%rsp), %rsi')  # (arg 1: stack frame)
 i(f'cmpq $${GDT_CODE_KERN}, %rsi')
 i(f'je 1f')
 i(f'swapgs')
@@ -206,7 +206,7 @@ i(f'swapgs')
 i(f'movb $$1, 0x53(%rsp)')  # store whether we did a swapgs above CS
 l(f'2:')
 n()
-i(f'mov 0x50(%rsp), %rsi')  # (arg 1: CS)
+i(f'lea 0x48(%rsp), %rsi')  # (arg 1: stack frame)
 i(f'call *%rax')
 n()
 i(f'testb $$1, 0x53(%rsp)')

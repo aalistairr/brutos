@@ -92,7 +92,7 @@ impl<'a, T: ?Sized, Cx: Critical> core::ops::DerefMut for SpinlockGuard<'a, T, C
 }
 
 impl<'a, T: ?Sized, Cx: Critical> SpinlockGuard<'a, T, Cx> {
-    pub(crate) unsafe fn into_is_locked(this: SpinlockGuard<'a, T, Cx>) -> &'a AtomicBool {
+    pub unsafe fn into_is_locked(this: SpinlockGuard<'a, T, Cx>) -> &'a AtomicBool {
         let is_locked = &this.spinlock.is_locked;
         mem::forget(this);
         is_locked

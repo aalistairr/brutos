@@ -1,5 +1,6 @@
 use core::pin::Pin;
 
+use brutos_memory::VirtAddr;
 use brutos_platform_pc as pc;
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
 use brutos_task::arch::GDT_CODE_KERN;
@@ -42,30 +43,52 @@ alias! { kill:
     stack_segment_fault
 }
 
+#[repr(C)]
+pub struct InterruptStackFrame {
+    rip: usize,
+    cs: u16,
+    _padding: [u8; 6],
+    rflags: usize,
+    rsp: usize,
+    ss: usize,
+}
+
 #[export_name = "int_handler_panic"]
-pub extern "C" fn panic(vector: usize, cs: u16, error: usize) {
+pub extern "C" fn panic(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     panic!(
-        "don't know how to handle interrupt (vector={}, cs={:#x}, error={:#x})",
-        vector, cs, error
+        "don't know how to handle interrupt (vector={}, cs={:#x}, %rip={:#x}, error={:#x})",
+        vector, stack_frame.cs, stack_frame.rip, error
     );
 }
 
 #[export_name = "int_handler_kill"]
-pub extern "C" fn kill(vector: usize, cs: u16, error: usize) {
-    if cs == GDT_CODE_KERN {
+pub extern "C" fn kill(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+    if stack_frame.cs == GDT_CODE_KERN {
         panic!(
-            "fatal exception in kernel (vector={}, error={:#x})",
-            vector, error
+            "fatal exception in kernel (vector={}, %rip={:#x}, error={:#x})",
+            vector, stack_frame.rip, error
         );
     }
     unimplemented!()
 }
 
+fn cr2() -> VirtAddr {
+    let addr: usize;
+    unsafe {
+        asm!("mov %cr2, $0" : "=r" (addr) ::: "volatile");
+    }
+    VirtAddr(addr)
+}
+
 #[export_name = "int_handler_page_fault"]
-pub extern "C" fn page_fault(_vector: usize, _cs: u16, _error: usize) {
+pub extern "C" fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+    let fault_addr = cr2();
     let critical_count = unsafe { brutos_task::arch::current_task_get_critical_count() };
     if critical_count > 0 {
-        panic!("page fault in a critical section");
+        panic!(
+            "page fault in a critical section (%rip={:#x}, fault addr={:?}, error={:#x})",
+            stack_frame.rip, fault_addr, error
+        );
     }
     unsafe {
         pc::interrupt::sti();
@@ -74,7 +97,7 @@ pub extern "C" fn page_fault(_vector: usize, _cs: u16, _error: usize) {
 }
 
 #[export_name = "int_handler_any"]
-pub extern "C" fn any(_vector: usize, _cs: u16, _error: usize) {
+pub extern "C" fn any(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
     unimplemented!()
 }
 

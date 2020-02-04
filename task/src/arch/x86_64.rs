@@ -28,7 +28,7 @@ pub unsafe fn current_task_get_critical_count() -> usize {
 
 impl<Cx: Context> Task<Cx> {
     #[inline]
-    pub unsafe fn current_task() -> *const Task<Cx> {
+    pub unsafe fn current_task_ptr() -> *const Task<Cx> {
         let task: *const Task<Cx>;
         asm!("mov %gs:0xc8, $0" : "=r" (task) ::::);
         task
@@ -86,10 +86,11 @@ impl Regs {
         kernel_stack: VirtAddr,
     ) {
         match entry_point {
-            EntryPoint::Kernel(entry_point, data) => {
+            EntryPoint::Kernel(entry_point, data0, data1) => {
                 self.rip = entry_point.0 as u64;
                 self.rsp = kernel_stack.0 as u64;
-                self.rdi = data as u64;
+                self.rdi = data0 as u64;
+                self.rsi = data1 as u64;
 
                 self.gs_base = state as *const _ as usize as u64;
                 self.gs_base_alt = state as *const _ as usize as u64;
@@ -179,12 +180,17 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
             mov 0x38(%rdi), %rsp        // use saved stack
             cmovne 0xb8(%rdi), %rsp     // use kernel stack
 
+            movq $$0, -0x8(%rsp)
+
         // Set up iret parameters
             pushq 0xac(%rdi)            // ss
             pushq 0x38(%rdi)            // rsp
             pushq 0x88(%rdi)            // rflags
             pushq 0xa8(%rdi)            // cs
             pushq 0x80(%rdi)            // rip
+
+            pushq 0x20(%rdi)            // %rdi
+            pushq 0x28(%rdi)            // %rsi
         
         // Load state
             mov 0x00(%rdi), %rax
@@ -204,6 +210,10 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
             mov 0x70(%rdi), %r14
             mov 0x78(%rdi), %r15
 
+            mov 0xae(%rdi), %es
+            mov 0xb0(%rdi), %fs
+            mov 0xb2(%rdi), %gs
+
             mov 0x90(%rdi), %rsi
             wrfsbase %rsi
             mov 0xa0(%rdi), %rsi
@@ -213,12 +223,9 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
             wrgsbase %rsi
 
             mov 0xaa(%rdi), %ds
-            mov 0xae(%rdi), %es
-            mov 0xb0(%rdi), %fs
-            mov 0xb2(%rdi), %gs
 
-            mov 0x28(%rdi), %rsi
-            mov 0x20(%rdi), %rdi
+            pop %rsi
+            pop %rdi
 
             iretq
         1:

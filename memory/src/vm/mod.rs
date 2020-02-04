@@ -88,6 +88,7 @@ pub struct Flags {
 
 pub struct MappingWasDestroyed;
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum FillError<MapPhysPageErr> {
     Map(mmu::MapError),
     MappingWasDestroyed,
@@ -107,6 +108,7 @@ impl<MapPhysPageErr> From<MappingWasDestroyed> for FillError<MapPhysPageErr> {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PageFaultError<MapPhysPageErr> {
     InvalidAccess,
     Fill(FillError<MapPhysPageErr>),
@@ -185,7 +187,7 @@ where
             Location::Aligned(align) => assert!(align.is_aligned(page_size.order().size())),
             Location::Fixed(addr) => assert!(addr.is_aligned(page_size.order().size())),
         }
-        Ok(self
+        let mapping = self
             .mappings()
             .lock()
             .as_mut()
@@ -201,7 +203,10 @@ where
                     mmu_flags: flags.mmu,
                 },
             )?
-            .clone())
+            .clone();
+        mapping.as_ref().data().status().initialize();
+        mapping.as_ref().data().status_condvar().initialize();
+        Ok(mapping)
     }
 
     pub fn remove_mapping(self: Pin<&Self>, mapping_addr: VirtAddr) -> Result<(), UnmapError> {

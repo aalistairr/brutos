@@ -1,14 +1,16 @@
 #![feature(asm, global_asm)]
-#![feature(const_if_match, const_panic)]
+#![feature(const_fn, const_if_match, const_panic)]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 
 use core::cell::UnsafeCell;
+use core::mem::ManuallyDrop;
 use core::pin::Pin;
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
 use brutos_memory::VirtAddr;
 use brutos_sync::spinlock::Spinlock;
 use brutos_util::linked_list::Node;
+use brutos_util::NonSend;
 
 pub mod arch;
 pub mod sched;
@@ -18,6 +20,8 @@ pub trait Context: Default + AllocOne<ArcInner<Task<Self>>> + brutos_sync::Criti
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory>;
     unsafe fn dealloc_stack(&mut self, stack: VirtAddr);
+
+    fn idle_task(&mut self) -> &Pin<Arc<Task<Self>, Self>>;
 }
 
 pub struct Task<Cx: Context> {
@@ -45,7 +49,7 @@ pub struct State<Cx: Context> {
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum EntryPoint {
-    Kernel(VirtAddr, usize),
+    Kernel(VirtAddr, usize, usize),
     #[cfg(feature = "user-mode")]
     User(VirtAddr, usize),
 }
@@ -75,6 +79,14 @@ impl<Cx: Context> Task<Cx> {
             (*task.state.get()).initialize(&task, entry_point, kernel_stack);
         }
         Ok(task)
+    }
+
+    pub fn current() -> NonSend<ManuallyDrop<Pin<Arc<Task<Cx>, Cx>>>> {
+        unsafe {
+            NonSend::new(ManuallyDrop::new(Pin::new_unchecked(Arc::from_raw(
+                Self::current_task_ptr(),
+            ))))
+        }
     }
 }
 

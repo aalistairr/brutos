@@ -1,15 +1,17 @@
 use core::mem::MaybeUninit;
 use core::ops::Range;
+use core::pin::Pin;
 use core::ptr::NonNull;
 
-use brutos_alloc::OutOfMemory;
+use brutos_alloc::{Arc, OutOfMemory};
 use brutos_memory::phys_alloc::bootstrap;
 use brutos_memory::vm::mmu;
 use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
 
 use crate::memory::{CutRange, FailedToBootstrap};
-use crate::Cx;
+use crate::{AddressSpace, Cx};
 
+pub const KERNEL_VMA: usize = 0xffffffff80000000;
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
 pub const PHYS_IDENT_SIZE: usize = 0x0000400000000000;
 pub const PHYS_IDENT_END: usize = PHYS_IDENT_OFFSET + PHYS_IDENT_SIZE;
@@ -54,12 +56,17 @@ unsafe impl bootstrap::Context for Cx {
 extern "C" {
     static _image_start: ();
     static _image_end: ();
+    static PHYS_IDENT_PML4: ();
 }
 
 fn image_range() -> Range<PhysAddr> {
     unsafe {
         PhysAddr(&_image_start as *const _ as usize)..PhysAddr(&_image_end as *const _ as usize)
     }
+}
+
+fn pml4_phys() -> PhysAddr {
+    unsafe { PhysAddr(&PHYS_IDENT_PML4 as *const _ as usize) }
 }
 
 pub fn remove_reserved_memory(
@@ -83,40 +90,16 @@ pub fn remove_reserved_memory(
     mmap
 }
 
-pub fn create_kernel_mmu_tables() -> Result<mmu::Tables, OutOfMemory> {
-    let mut tables = mmu::Tables::new();
-    for addr in (KERNEL_ADDR_SPACE_RANGE.start.0..KERNEL_ADDR_SPACE_RANGE.end.0)
-        .step_by(mmu::arch::Level::Pml4.entry_size())
-    {
-        unsafe {
-            match mmu::arch::create_permanent_table(
-                &mut Cx::default(),
-                &mut tables.root,
-                VirtAddr(addr),
-                mmu::arch::Level::Pml4,
-            ) {
-                Ok(()) => (),
-                Err(mmu::MapError::OutOfMemory) => return Err(OutOfMemory),
-                Err(_) => unreachable!(),
-            }
-        }
-    }
-    Ok(tables)
+pub unsafe fn create_kernel_mmu_tables() -> Result<mmu::Tables, OutOfMemory> {
+    Ok(mmu::Tables::with_root(
+        mmu::arch::Entry::new()
+            .with_address(pml4_phys())
+            .with_population(mmu::arch::Entry::PERMANENT)
+            .with_present(true),
+    ))
 }
 
-pub unsafe fn destroy_kernel_mmu_tables(mut tables: mmu::Tables) {
-    for addr in (KERNEL_ADDR_SPACE_RANGE.start.0..KERNEL_ADDR_SPACE_RANGE.end.0)
-        .step_by(mmu::arch::Level::Pml4.entry_size())
-    {
-        mmu::arch::make_nonpermanent(
-            &mut Cx::default(),
-            &mut tables.root,
-            VirtAddr(addr),
-            mmu::arch::Level::Pml4,
-        )
-        .expect("invalid page tables");
-    }
-}
+pub unsafe fn destroy_kernel_mmu_tables(_tables: mmu::Tables) {}
 
 static mut SHARED_ORDER9_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
     MaybeUninit::uninit();
@@ -145,3 +128,5 @@ impl brutos_memory::vm::Context for Cx {
         }
     }
 }
+
+pub fn create_kernel_mappings(_addr_space: &Pin<Arc<AddressSpace, Cx>>) {}

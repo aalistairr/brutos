@@ -34,6 +34,18 @@ pub trait RW: R + W {
 }
 impl<A: R + W> RW for A {}
 
+pub unsafe fn read<A: R>() -> A::Value {
+    A::read()
+}
+
+pub unsafe fn write<A: W>(value: A::Value) {
+    A::write(value);
+}
+
+pub unsafe fn map<A: RW, F: FnOnce(A::Value) -> A::Value>(f: F) {
+    A::map(f);
+}
+
 macro_rules! msr {
     ($addr:expr => $name:ident: $value:ty = $($access:ident)*) => {
         pub enum $name {}

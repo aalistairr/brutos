@@ -131,6 +131,7 @@ impl Screen {
                 }
             }
         }
+        self.y = FB_HEIGHT - 1;
     }
 
     fn update_cursor(&mut self) {

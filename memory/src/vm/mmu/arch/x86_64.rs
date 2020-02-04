@@ -8,7 +8,7 @@ use brutos_alloc::OutOfMemory;
 use brutos_util::uint::UInt;
 use brutos_util_macros::{bitfield, BitfieldNew};
 
-use super::super::{Flags, MapError, PageSize, UnmapError};
+use super::super::{Flags, MapError, PageSize, Tables, UnmapError};
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Default, BitfieldNew)]
@@ -24,15 +24,22 @@ bitfield! {
     pub field writethrough: bool => 3;
     pub field address: PhysAddr { 12..48 => 12..48 }
     pub field population: usize => 52..52 + 10;
-    pub field permanent: bool => 52 + 10 + 1;
 }
 
 impl Entry {
+    pub const PERMANENT: usize = (1 << 10) - 1;
+
     pub fn with_inc_population(self) -> Self {
+        if self.population() == Self::PERMANENT {
+            return self;
+        }
         self.with_population(self.population() + 1)
     }
 
     pub fn with_dec_population(self) -> Self {
+        if self.population() == Self::PERMANENT {
+            return self;
+        }
         self.with_population(self.population() - 1)
     }
 }
@@ -40,6 +47,14 @@ impl Entry {
 impl fmt::Debug for Entry {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "Entry({:#018x})", self.0)
+    }
+}
+
+impl Tables {
+    pub unsafe fn with_root(root: Entry) -> Tables {
+        Tables {
+            root: EntryCell(UnsafeCell::new(root.0)),
+        }
     }
 }
 
@@ -274,7 +289,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
         ) -> bool {
             let entry = entry_cell.load_nonvolatile();
             if entry.is_present() {
-                if is_ps(entry) || entry.population() > 0 || entry.is_permanent() {
+                if is_ps(entry) || entry.population() > 0 {
                     return true;
                 }
                 entry_cell.store(Entry::new());
@@ -506,7 +521,7 @@ pub unsafe fn create_permanent_table<Cx: Context>(
     let (_, parent_entry_cell) = trail.find_entry(lvl.down(), virt_addr)?;
     parent_entry_cell
         .unwrap()
-        .map_nonvolatile(|e| e.with_permanent(true));
+        .map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
     Ok(())
 }
 
@@ -529,7 +544,7 @@ pub unsafe fn make_nonpermanent<Cx: Context>(
         })?;
     parent_entry_cell
         .unwrap()
-        .map_nonvolatile(|e| e.with_permanent(false));
+        .map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
     Ok(())
 }
 

@@ -1,5 +1,5 @@
 use brutos_alloc::OutOfMemory;
-use brutos_memory::{AllocPhysPage, Order, PhysAddr};
+use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
 use brutos_multiboot2::ffi::BootInfo;
 use brutos_multiboot2::{MmapEntryTy, Tag};
 use brutos_platform_pc as pc;
@@ -40,6 +40,7 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
         task::arch::load_gdt();
         self::interrupt::initialize();
         task::arch::current_task_dec_critical_count();
+        pc::msr::map::<pc::msr::Ia32Efer, _>(|x| x.with_nx_enabled(true));
     }
 
     self::SCREEN.lock().clear();
@@ -81,6 +82,7 @@ macro_rules! print {
     ($($arg:tt)*) => ($crate::arch::print(core::format_args!($($arg)*)));
 }
 
+#[no_mangle]
 pub fn print(args: core::fmt::Arguments) {
     core::fmt::Write::write_fmt(&mut *SCREEN.lock(), args).expect("failed to write");
 }
@@ -101,4 +103,21 @@ unsafe impl brutos_memory::vm::mmu::arch::Context for Cx {
             .expect("Failed to map page translation table into memory")
             .as_ptr() as *mut _
     }
+}
+
+#[naked]
+unsafe fn idle_task_entry() {
+    asm!("
+    1:
+        hlt
+        jmp 1b
+    " :::: "volatile");
+}
+
+pub fn idle_task_entry_addr() -> VirtAddr {
+    VirtAddr(idle_task_entry as usize)
+}
+
+pub fn idle_task_entry_arg() -> usize {
+    0
 }

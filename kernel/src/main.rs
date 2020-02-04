@@ -9,13 +9,14 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 use core::sync::atomic::AtomicBool;
 
-use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
+use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory, PinWeak};
 use brutos_memory::arch::PAGE_SIZE;
 use brutos_memory::slab_alloc as slab;
 use brutos_memory::vm;
 use brutos_memory::{AllocMappedPage, AllocPhysPage, Order, PhysAddr, VirtAddr};
 use brutos_sync::mutex::{Mutex, PinMutex};
-use brutos_task::Task;
+use brutos_sync::spinlock::SpinlockGuard;
+use brutos_task::{sched, Task};
 
 const STACK_SIZE: usize = 16 * PAGE_SIZE;
 
@@ -29,10 +30,39 @@ pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     initialize_task_allocator();
     initialize_mapping_allocator();
     initialize_addr_space_allocator();
+    initialize_scheduler();
     let available_memory = memory::bootstrap(mmap).expect("Failed to bootstrap physical memory");
     println!("{} bytes available", available_memory);
     create_kernel_address_space().expect("failed to create kernel address space");
-    unimplemented!()
+    create_idle_task().expect("failed to create idle task");
+    scheduler().as_ref().schedule(
+        Task::new(
+            Arc::pin_downgrade(AddressSpace::kernel()),
+            0,
+            brutos_task::EntryPoint::Kernel(VirtAddr(task as usize), 1, 0),
+        )
+        .expect("failed to create task 1"),
+    );
+    scheduler().as_ref().schedule(
+        Task::new(
+            Arc::pin_downgrade(AddressSpace::kernel()),
+            0,
+            brutos_task::EntryPoint::Kernel(VirtAddr(task as usize), 2, 0),
+        )
+        .expect("failed to create task 2"),
+    );
+    let dummy = AtomicBool::new(true);
+    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&dummy);
+    unreachable!()
+}
+
+extern "C" fn task(n: usize) -> ! {
+    loop {
+        println!("Task {} says hi", n);
+        unsafe {
+            yieldd();
+        }
+    }
 }
 
 #[derive(Default)]
@@ -50,20 +80,37 @@ unsafe impl brutos_sync::Critical for Cx {
     }
 }
 
+static SCHEDULER: sched::Scheduler<Cx> = sched::Scheduler::new();
+
+fn scheduler() -> Pin<&'static sched::Scheduler<Cx>> {
+    unsafe { Pin::new_unchecked(&SCHEDULER) }
+}
+
+fn initialize_scheduler() {
+    scheduler().initialize();
+}
+
 unsafe impl brutos_sync::waitq::Context for Cx {
     type WaitQSel = brutos_task::WaitQSel<Cx>;
 
     unsafe fn deschedule(&mut self) -> Pin<Arc<Task<Cx>, Cx>> {
-        unimplemented!()
+        scheduler().deschedule()
     }
 
-    unsafe fn schedule(&mut self, _: Pin<Arc<Task<Cx>, Cx>>) {
-        unimplemented!()
+    unsafe fn schedule(&mut self, task: Pin<Arc<Task<Cx>, Cx>>) {
+        scheduler().schedule(task);
     }
 
-    unsafe fn unlock_and_yield(_: &AtomicBool) {
-        unimplemented!()
+    unsafe fn unlock_and_yield(is_locked: &AtomicBool) {
+        scheduler().unlock_and_yield(is_locked);
     }
+}
+
+pub unsafe fn yieldd() {
+    let task = Task::<Cx>::current();
+    let is_locked = SpinlockGuard::into_is_locked(task.switch_lock.lock());
+    scheduler().schedule(scheduler().deschedule());
+    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(is_locked);
 }
 
 unsafe impl AllocPhysPage for Cx {
@@ -175,6 +222,7 @@ unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
         })?,
     );
     addr_space.vm().initialize();
+    arch::memory::create_kernel_mappings(addr_space);
     Ok(())
 }
 
@@ -188,8 +236,24 @@ impl AddressSpace {
     }
 }
 
+static mut IDLE_TASK: core::mem::MaybeUninit<Pin<Arc<Task<Cx>, Cx>>> =
+    core::mem::MaybeUninit::uninit();
+
+unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
+    IDLE_TASK.write(Task::new(
+        Arc::pin_downgrade(AddressSpace::kernel()),
+        !0,
+        brutos_task::EntryPoint::Kernel(
+            arch::idle_task_entry_addr(),
+            arch::idle_task_entry_arg(),
+            0,
+        ),
+    )?);
+    Ok(())
+}
+
 impl brutos_task::Context for Cx {
-    type AddrSpace = Pin<Arc<AddressSpace, Cx>>;
+    type AddrSpace = PinWeak<AddressSpace, Cx>;
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory> {
         use vm::mappings::MapError;
@@ -237,6 +301,10 @@ impl brutos_task::Context for Cx {
             .vm()
             .remove_mapping(addr - STACK_SIZE)
             .expect("failed to deallocate stack");
+    }
+
+    fn idle_task(&mut self) -> &Pin<Arc<Task<Cx>, Cx>> {
+        unsafe { &*IDLE_TASK.as_ptr() }
     }
 }
 

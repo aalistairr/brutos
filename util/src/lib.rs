@@ -38,3 +38,19 @@ impl<F: FnOnce()> Guard<F> {
 pub trait ConvertRepr {
     type Repr;
 }
+
+pub struct NonSend<T>(T);
+
+impl<T> NonSend<T> {
+    pub fn new(value: T) -> NonSend<T> {
+        NonSend(value)
+    }
+}
+
+impl<T> core::ops::Deref for NonSend<T> {
+    type Target = T;
+
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}

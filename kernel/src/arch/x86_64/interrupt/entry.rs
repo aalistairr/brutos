@@ -2265,7 +2265,7 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %r10
         push %r11
 
-        mov 0x50(%rsp), %rsi
+        lea 0x48(%rsp), %rsi
         cmpq $$8, %rsi
         je 1f
         swapgs
@@ -2320,7 +2320,7 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         movb $$1, 0x53(%rsp)
     2:
 
-        mov 0x50(%rsp), %rsi
+        lea 0x48(%rsp), %rsi
         call *%rax
 
         testb $$1, 0x53(%rsp)

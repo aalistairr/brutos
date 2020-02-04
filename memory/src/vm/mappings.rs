@@ -168,7 +168,7 @@ fn cut_free_range(
         Some(free_range.start)
     };
     let end = if new.guard_pages || after.map(|f| f.guard_pages).unwrap_or(false) {
-        free_range.end.checked_add(PAGE_SIZE)
+        free_range.end.checked_sub(PAGE_SIZE)
     } else {
         Some(free_range.end)
     };

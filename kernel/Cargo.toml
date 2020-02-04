@@ -13,6 +13,7 @@ brutos-multiboot2 = { path = "../multiboot2" }
 brutos-platform-pc = { path = "../platform/pc" }
 brutos-task = { path = "../task" }
 brutos-sync = { path = "../sync" }
+brutos-util = { path = "../util" }
 
 [[bin]]
 name = "brutos-kernel"
