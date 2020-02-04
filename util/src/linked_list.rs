@@ -628,25 +628,18 @@ impl<S: Sel> LinkedList<S> {
         self.last_mut().map(CursorMut::unlink)
     }
 
-    pub fn swap(self: Pin<&mut Self>, other: Pin<&mut Self>) {
-        unsafe {
-            let mut self_anchor = self.anchor();
-            let mut other_anchor = other.anchor();
-
-            let (mut self_first, mut self_last) =
-                (self_anchor.as_ref().next(), self_anchor.as_ref().prev());
-            let (mut other_first, mut other_last) =
-                (other_anchor.as_ref().next(), other_anchor.as_ref().prev());
-
-            self_anchor.as_mut().next = Some(other_first);
-            self_anchor.as_mut().prev = Some(other_last);
-            other_anchor.as_mut().next = Some(self_first);
-            other_anchor.as_mut().prev = Some(self_last);
-
-            self_first.as_mut().prev = Some(other_anchor);
-            self_last.as_mut().next = Some(other_anchor);
-            other_first.as_mut().prev = Some(self_anchor);
-            other_last.as_mut().next = Some(self_anchor);
+    pub fn swap(mut self: Pin<&mut Self>, mut other: Pin<&mut Self>) {
+        let mut tmp = LinkedList::<S>::new();
+        let mut tmp = unsafe { Pin::new_unchecked(&mut tmp) };
+        tmp.as_mut().initialize();
+        while let Some(x) = self.as_mut().pop_front() {
+            tmp.as_mut().push_back(x);
+        }
+        while let Some(x) = other.as_mut().pop_front() {
+            self.as_mut().push_back(x);
+        }
+        while let Some(x) = tmp.as_mut().pop_front() {
+            other.as_mut().push_back(x);
         }
     }
 
