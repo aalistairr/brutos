@@ -5,6 +5,7 @@ CFG ?= debug
 
 ifeq ($(CFG),release)
 CARGO_FLAGS += --release
+CARGO_FLAGS_RUSTFLAGS += -C lto
 else
 RUSTFLAGS += -C force-frame-pointers=yes
 endif
@@ -14,7 +15,7 @@ BUILD_DIR ?= target/$(TARGET)/$(CFG)
 export RUSTFLAGS
 
 $(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S kernel/src/arch/x86_64/interrupt/entry.rs
-	xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS) -- -C link-arg=-Tkernel/$(ARCH).lds -C link-arg=-n
+	xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS) -- -C link-arg=-Tkernel/$(ARCH).lds -C link-arg=-n $(CARGO_FLAGS_RUSTFLAGS)
 
 kernel/src/arch/x86_64/page_tables.S: kernel/src/arch/x86_64/page_tables.py
 	python3 $^ > $@
@@ -26,6 +27,15 @@ kernel/src/arch/x86_64/interrupt/entry.rs: kernel/src/arch/x86_64/interrupt/entr
 $(BUILD_DIR)/brutos-kernel.iso: $(BUILD_DIR)/brutos-kernel
 	rm -f $@
 	cd $(BUILD_DIR); xorriso -outdev brutos-kernel.iso -add brutos-kernel
+
+$(BUILD_DIR)/brutos-kernel.vmdk: $(BUILD_DIR)/brutos-kernel.iso
+	rm -f $@
+	qemu-img convert -f raw -O vmdk $< $@
+
+.PHONY: iso
+iso: $(BUILD_DIR)/brutos-kernel.iso
+.PHONY: vmdk
+vmdk: $(BUILD_DIR)/brutos-kernel.vmdk
 
 
 .PHONY: qemu
