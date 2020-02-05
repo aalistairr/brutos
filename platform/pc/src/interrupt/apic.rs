@@ -16,6 +16,9 @@ pub struct Apic([Register; 64]);
 pub unsafe trait Reg {
     type Value;
 }
+pub trait RegIndex: Reg {
+    const INDEX: usize;
+}
 pub trait R: Reg {
     unsafe fn read(apic: &Apic) -> Self::Value;
 }
@@ -49,16 +52,23 @@ impl Apic {
     {
         self.write::<A>(f(self.read::<A>()));
     }
+
+    pub fn register_as_mut_ptr<A>(&mut self) -> *mut u32
+    where
+        A: RegIndex,
+    {
+        self.0[A::INDEX].value.get()
+    }
 }
 
 pub mod reg {
-    use super::{Apic, Reg, Register, R, W};
+    use super::{Apic, Reg, RegIndex, Register, R, W};
 
     macro_rules! reg {
     ($offset:expr => $name:ident: $t:ty = $($access:tt)*) => {
         pub enum $name {}
 
-        impl $name {
+        impl RegIndex for $name {
             const INDEX: usize = {
                 assert!($offset & (core::mem::align_of::<Register>() - 1) == 0);
                 $offset / core::mem::size_of::<Register>()

@@ -1,5 +1,5 @@
 use core::pin::Pin;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{fence, AtomicBool, Ordering};
 
 use brutos_alloc::Arc;
 use brutos_memory::VirtAddr;
@@ -121,6 +121,7 @@ impl Regs {
 }
 
 pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) {
+    fence(Ordering::SeqCst);
     asm!("
         // Save state
             mov %rax, %gs:0x00
@@ -183,10 +184,12 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
             movq $$0, -0x8(%rsp)
 
         // Set up iret parameters
-            pushq 0xac(%rdi)            // ss
+            sub $$0x6, %rsp
+            pushw 0xac(%rdi)            // ss
             pushq 0x38(%rdi)            // rsp
             pushq 0x88(%rdi)            // rflags
-            pushq 0xa8(%rdi)            // cs
+            sub $$0x6, %rsp
+            pushw 0xa8(%rdi)            // cs
             pushq 0x80(%rdi)            // rip
 
             pushq 0x20(%rdi)            // %rdi
@@ -232,9 +235,8 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
         "
         :
         : "{rax}" (switch_lock), "{rdi}" (to)
-        : "memory"
+        : "cc", "memory"
         : "volatile");
-
     Cx::leave_critical();
 }
 

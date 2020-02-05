@@ -30,7 +30,7 @@ $(BUILD_DIR)/brutos-kernel.iso: $(BUILD_DIR)/brutos-kernel
 
 .PHONY: qemu
 qemu: $(BUILD_DIR)/brutos-kernel.iso
-	qemu-system-x86_64 -drive if=ide,index=0,format=raw,file=assets/grub.iso -drive if=ide,index=1,format=raw,file=$(BUILD_DIR)/brutos-kernel.iso -cpu qemu64,+fsgsbase
+	qemu-system-x86_64 -drive if=ide,index=0,format=raw,file=assets/grub.iso -drive if=ide,index=1,format=raw,file=$(BUILD_DIR)/brutos-kernel.iso -cpu qemu64,+fsgsbase $(QEMUFLAGS)
 
 .PHONY: bochs
 bochs: $(BUILD_DIR)/brutos-kernel.iso

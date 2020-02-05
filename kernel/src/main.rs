@@ -1,6 +1,7 @@
 #![feature(asm, global_asm, naked_functions)]
 #![feature(const_raw_ptr_deref, const_mut_refs)]
 #![feature(maybe_uninit_extra)]
+#![feature(format_args_nl)]
 #![no_std]
 #![no_main]
 
@@ -35,33 +36,29 @@ pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     println!("{} bytes available", available_memory);
     create_kernel_address_space().expect("failed to create kernel address space");
     create_idle_task().expect("failed to create idle task");
-    scheduler().as_ref().schedule(
-        Task::new(
-            Arc::pin_downgrade(AddressSpace::kernel()),
-            0,
-            brutos_task::EntryPoint::Kernel(VirtAddr(task as usize), 1, 0),
-        )
-        .expect("failed to create task 1"),
-    );
-    scheduler().as_ref().schedule(
-        Task::new(
-            Arc::pin_downgrade(AddressSpace::kernel()),
-            0,
-            brutos_task::EntryPoint::Kernel(VirtAddr(task as usize), 2, 0),
-        )
-        .expect("failed to create task 2"),
-    );
-    let dummy = AtomicBool::new(true);
-    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&dummy);
+
+    for i in 0..32 {
+        scheduler().as_ref().schedule(
+            Task::new(
+                Arc::pin_downgrade(AddressSpace::kernel()),
+                0,
+                brutos_task::EntryPoint::Kernel(VirtAddr(start_task as usize), i, 0),
+            )
+            .expect("failed to create task"),
+        );
+    }
+    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&AtomicBool::new(true));
     unreachable!()
 }
 
-extern "C" fn task(n: usize) -> ! {
+extern "C" fn start_task(n: usize) -> ! {
+    unsafe {
+        arch::interrupt::unmask();
+    }
+    let mut i = 0;
     loop {
-        println!("Task {} says hi", n);
-        unsafe {
-            yieldd();
-        }
+        println!("task {}: {}", n, i);
+        i += 1;
     }
 }
 
@@ -70,12 +67,13 @@ pub struct Cx;
 
 unsafe impl brutos_sync::Critical for Cx {
     unsafe fn enter_critical() {
+        self::arch::interrupt::mask();
         brutos_task::arch::current_task_inc_critical_count();
     }
 
     unsafe fn leave_critical() {
         if brutos_task::arch::current_task_dec_critical_count() {
-            self::arch::interrupt::enable();
+            self::arch::interrupt::unmask();
         }
     }
 }
@@ -102,6 +100,7 @@ unsafe impl brutos_sync::waitq::Context for Cx {
     }
 
     unsafe fn unlock_and_yield(is_locked: &AtomicBool) {
+        arch::interrupt::set_timer(1000000000);
         scheduler().unlock_and_yield(is_locked);
     }
 }

@@ -13,10 +13,14 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
         crate::arch::halt();
     }
 
-    let mut screen = crate::arch::SCREEN.lock();
+    let mut screen = unsafe {
+        pc::fb::Screen::with_framebuffer({
+            (pc::fb::FRAMEBUFFER_ADDR + crate::arch::memory::PHYS_IDENT_OFFSET) as *mut _
+        })
+    };
     screen.style = pc::fb::Style::new()
         .with_foreground(pc::fb::Color::White)
         .with_background(pc::fb::Color::Red);
-    let _ = write!(&mut *screen, "{}", info);
+    let _ = write!(&mut screen, "{}", info);
     crate::arch::halt();
 }

@@ -61,6 +61,7 @@ macro_rules! msr {
 
 msr!(0x1b => Ia32ApicBase: ApicBase = R W);
 msr!(0x277 => Ia32Pat: Pat = R W);
+msr!(0x6e0 => Ia32TscDeadline: u64 = R W);
 msr!(0xc000_0080 => Ia32Efer: Efer = R W);
 msr!(0xc000_0082 => Ia32LStar: u64 = R W);
 msr!(0xc000_0084 => Ia32FMask: u64 = R W);
@@ -75,7 +76,7 @@ bitfield! {
     pub field bsp: bool => 8;
     pub field x2apic_enabled: bool => 10;
     pub field enabled: bool => 11;
-    pub field base: u64 { 12..48 => 12..48 }
+    pub field base: usize { 12..48 => 12..48 }
 }
 
 bitfield! {

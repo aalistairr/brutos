@@ -1,25 +1,27 @@
-pub mod vectors {
-    pub const DIVIDE_ERROR: usize = 0;
-    pub const DEBUG_EXCEPTION: usize = 1;
-    pub const NMI: usize = 2;
-    pub const BREAKPOINT: usize = 3;
-    pub const OVERFLOW: usize = 4;
-    pub const BOUND_RANGE_EXCEEDED: usize = 5;
-    pub const INVALID_OPCODE: usize = 6;
-    pub const NO_MATH_COPROCESSOR: usize = 7;
-    pub const DOUBLE_FAULT: usize = 8;
-    pub const COPROCESSOR_SEGMENT_OVERRUN: usize = 9;
-    pub const INVALID_TSS: usize = 10;
-    pub const SEGMENT_NOT_PRESENT: usize = 11;
-    pub const STACK_SEGMENT_FAULT: usize = 12;
-    pub const GENERAL_PROTECTION: usize = 13;
-    pub const PAGE_FAULT: usize = 14;
-    pub const FP_ERROR: usize = 16;
-    pub const ALIGNMENT_CHECK: usize = 17;
-    pub const MACHINE_CHECK: usize = 18;
-    pub const SIMD_ERROR: usize = 19;
-    pub const VIRTUALIZATION_EXCEPTION: usize = 20;
-    pub const CONTROL_PROTECTION_EXCEPTION: usize = 21;
+pub mod vector {
+    pub const DIVIDE_ERROR: u8 = 0;
+    pub const DEBUG_EXCEPTION: u8 = 1;
+    pub const NMI: u8 = 2;
+    pub const BREAKPOINT: u8 = 3;
+    pub const OVERFLOW: u8 = 4;
+    pub const BOUND_RANGE_EXCEEDED: u8 = 5;
+    pub const INVALID_OPCODE: u8 = 6;
+    pub const NO_MATH_COPROCESSOR: u8 = 7;
+    pub const DOUBLE_FAULT: u8 = 8;
+    pub const COPROCESSOR_SEGMENT_OVERRUN: u8 = 9;
+    pub const INVALID_TSS: u8 = 10;
+    pub const SEGMENT_NOT_PRESENT: u8 = 11;
+    pub const STACK_SEGMENT_FAULT: u8 = 12;
+    pub const GENERAL_PROTECTION: u8 = 13;
+    pub const PAGE_FAULT: u8 = 14;
+    pub const FP_ERROR: u8 = 16;
+    pub const ALIGNMENT_CHECK: u8 = 17;
+    pub const MACHINE_CHECK: u8 = 18;
+    pub const SIMD_ERROR: u8 = 19;
+    pub const VIRTUALIZATION_EXCEPTION: u8 = 20;
+    pub const CONTROL_PROTECTION_EXCEPTION: u8 = 21;
+    pub const SPURIOUS: u8 = 32;
+    pub const TIMER: u8 = 33;
 }
 
 pub const ENTRY_FUNCTIONS: [unsafe extern "C" fn(); 256] = [
@@ -281,27 +283,24 @@ pub const ENTRY_FUNCTIONS: [unsafe extern "C" fn(); 256] = [
     interrupt_255_entry,
 ];
 
-
-#[naked]
-#[no_mangle]
-pub unsafe extern "C" fn interrupt_entry_halt() {
-    asm!("
-        cli
-        hlt
-    " :::: "volatile");
-}
-
+extern "C" { fn interrupt_entry_halt(); }
 
 #[naked]
 #[no_mangle]
 pub unsafe extern "C" fn interrupt_entry_functions() {
     asm!("
     interrupt_entry_unswapped_gs_prefix_start:
+    .global interrupt_entry_halt
+    interrupt_entry_halt:
+        cli
+        hlt
     .global interrupt_0_entry
     interrupt_0_entry:
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$0, %rdi
         mov $$int_handler_divide_error, %rax
         jmp interrupt_x_entry
@@ -310,6 +309,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$1, %rdi
         mov $$int_handler_debug_exception, %rax
         jmp interrupt_x_entry
@@ -318,6 +319,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$2, %rdi
         mov $$int_handler_nmi, %rax
         jmp interrupt_nmi_entry
@@ -326,6 +329,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$3, %rdi
         mov $$int_handler_breakpoint, %rax
         jmp interrupt_x_entry
@@ -334,6 +339,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$4, %rdi
         mov $$int_handler_overflow, %rax
         jmp interrupt_x_entry
@@ -342,6 +349,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$5, %rdi
         mov $$int_handler_bound_range_exceeded, %rax
         jmp interrupt_x_entry
@@ -350,6 +359,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$6, %rdi
         mov $$int_handler_invalid_opcode, %rax
         jmp interrupt_x_entry
@@ -358,6 +369,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$7, %rdi
         mov $$int_handler_no_math_coprocessor, %rax
         jmp interrupt_x_entry
@@ -366,6 +379,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$8, %rdi
         mov $$int_handler_double_fault, %rax
         jmp interrupt_x_entry
@@ -374,6 +389,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$9, %rdi
         mov $$int_handler_coprocessor_segment_overrun, %rax
         jmp interrupt_x_entry
@@ -382,6 +399,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$10, %rdi
         mov $$int_handler_invalid_tss, %rax
         jmp interrupt_x_entry
@@ -390,6 +409,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$11, %rdi
         mov $$int_handler_segment_not_present, %rax
         jmp interrupt_x_entry
@@ -398,6 +419,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$12, %rdi
         mov $$int_handler_stack_segment_fault, %rax
         jmp interrupt_x_entry
@@ -406,6 +429,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$13, %rdi
         mov $$int_handler_general_protection, %rax
         jmp interrupt_x_entry
@@ -414,6 +439,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$14, %rdi
         mov $$int_handler_page_fault, %rax
         jmp interrupt_x_entry
@@ -422,6 +449,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$16, %rdi
         mov $$int_handler_fp_error, %rax
         jmp interrupt_x_entry
@@ -430,6 +459,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$17, %rdi
         mov $$int_handler_alignment_check, %rax
         jmp interrupt_x_entry
@@ -438,6 +469,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$18, %rdi
         mov $$int_handler_machine_check, %rax
         jmp interrupt_x_entry
@@ -446,6 +479,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$19, %rdi
         mov $$int_handler_simd_error, %rax
         jmp interrupt_x_entry
@@ -454,6 +489,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$20, %rdi
         mov $$int_handler_virtualization_exception, %rax
         jmp interrupt_x_entry
@@ -462,6 +499,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         xchg (%rsp), %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$21, %rdi
         mov $$int_handler_control_protection_exception, %rax
         jmp interrupt_x_entry
@@ -470,22 +509,28 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$32, %rdi
-        mov $$int_handler_any, %rax
+        mov $$int_handler_spurious, %rax
         jmp interrupt_x_entry
     .global interrupt_33_entry
     interrupt_33_entry:
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$33, %rdi
-        mov $$int_handler_any, %rax
+        mov $$int_handler_timer, %rax
         jmp interrupt_x_entry
     .global interrupt_34_entry
     interrupt_34_entry:
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$34, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -494,6 +539,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$35, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -502,6 +549,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$36, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -510,6 +559,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$37, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -518,6 +569,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$38, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -526,6 +579,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$39, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -534,6 +589,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$40, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -542,6 +599,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$41, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -550,6 +609,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$42, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -558,6 +619,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$43, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -566,6 +629,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$44, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -574,6 +639,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$45, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -582,6 +649,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$46, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -590,6 +659,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$47, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -598,6 +669,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$48, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -606,6 +679,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$49, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -614,6 +689,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$50, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -622,6 +699,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$51, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -630,6 +709,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$52, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -638,6 +719,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$53, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -646,6 +729,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$54, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -654,6 +739,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$55, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -662,6 +749,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$56, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -670,6 +759,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$57, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -678,6 +769,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$58, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -686,6 +779,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$59, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -694,6 +789,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$60, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -702,6 +799,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$61, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -710,6 +809,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$62, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -718,6 +819,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$63, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -726,6 +829,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$64, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -734,6 +839,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$65, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -742,6 +849,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$66, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -750,6 +859,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$67, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -758,6 +869,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$68, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -766,6 +879,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$69, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -774,6 +889,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$70, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -782,6 +899,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$71, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -790,6 +909,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$72, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -798,6 +919,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$73, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -806,6 +929,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$74, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -814,6 +939,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$75, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -822,6 +949,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$76, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -830,6 +959,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$77, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -838,6 +969,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$78, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -846,6 +979,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$79, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -854,6 +989,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$80, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -862,6 +999,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$81, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -870,6 +1009,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$82, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -878,6 +1019,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$83, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -886,6 +1029,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$84, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -894,6 +1039,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$85, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -902,6 +1049,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$86, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -910,6 +1059,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$87, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -918,6 +1069,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$88, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -926,6 +1079,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$89, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -934,6 +1089,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$90, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -942,6 +1099,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$91, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -950,6 +1109,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$92, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -958,6 +1119,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$93, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -966,6 +1129,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$94, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -974,6 +1139,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$95, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -982,6 +1149,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$96, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -990,6 +1159,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$97, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -998,6 +1169,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$98, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1006,6 +1179,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$99, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1014,6 +1189,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$100, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1022,6 +1199,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$101, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1030,6 +1209,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$102, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1038,6 +1219,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$103, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1046,6 +1229,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$104, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1054,6 +1239,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$105, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1062,6 +1249,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$106, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1070,6 +1259,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$107, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1078,6 +1269,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$108, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1086,6 +1279,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$109, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1094,6 +1289,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$110, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1102,6 +1299,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$111, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1110,6 +1309,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$112, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1118,6 +1319,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$113, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1126,6 +1329,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$114, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1134,6 +1339,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$115, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1142,6 +1349,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$116, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1150,6 +1359,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$117, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1158,6 +1369,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$118, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1166,6 +1379,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$119, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1174,6 +1389,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$120, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1182,6 +1399,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$121, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1190,6 +1409,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$122, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1198,6 +1419,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$123, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1206,6 +1429,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$124, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1214,6 +1439,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$125, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1222,6 +1449,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$126, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1230,6 +1459,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$127, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1238,6 +1469,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$128, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1246,6 +1479,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$129, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1254,6 +1489,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$130, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1262,6 +1499,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$131, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1270,6 +1509,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$132, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1278,6 +1519,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$133, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1286,6 +1529,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$134, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1294,6 +1539,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$135, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1302,6 +1549,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$136, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1310,6 +1559,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$137, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1318,6 +1569,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$138, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1326,6 +1579,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$139, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1334,6 +1589,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$140, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1342,6 +1599,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$141, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1350,6 +1609,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$142, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1358,6 +1619,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$143, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1366,6 +1629,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$144, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1374,6 +1639,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$145, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1382,6 +1649,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$146, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1390,6 +1659,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$147, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1398,6 +1669,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$148, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1406,6 +1679,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$149, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1414,6 +1689,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$150, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1422,6 +1699,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$151, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1430,6 +1709,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$152, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1438,6 +1719,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$153, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1446,6 +1729,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$154, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1454,6 +1739,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$155, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1462,6 +1749,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$156, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1470,6 +1759,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$157, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1478,6 +1769,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$158, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1486,6 +1779,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$159, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1494,6 +1789,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$160, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1502,6 +1799,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$161, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1510,6 +1809,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$162, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1518,6 +1819,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$163, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1526,6 +1829,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$164, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1534,6 +1839,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$165, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1542,6 +1849,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$166, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1550,6 +1859,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$167, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1558,6 +1869,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$168, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1566,6 +1879,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$169, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1574,6 +1889,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$170, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1582,6 +1899,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$171, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1590,6 +1909,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$172, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1598,6 +1919,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$173, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1606,6 +1929,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$174, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1614,6 +1939,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$175, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1622,6 +1949,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$176, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1630,6 +1959,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$177, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1638,6 +1969,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$178, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1646,6 +1979,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$179, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1654,6 +1989,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$180, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1662,6 +1999,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$181, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1670,6 +2009,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$182, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1678,6 +2019,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$183, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1686,6 +2029,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$184, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1694,6 +2039,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$185, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1702,6 +2049,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$186, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1710,6 +2059,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$187, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1718,6 +2069,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$188, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1726,6 +2079,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$189, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1734,6 +2089,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$190, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1742,6 +2099,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$191, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1750,6 +2109,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$192, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1758,6 +2119,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$193, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1766,6 +2129,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$194, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1774,6 +2139,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$195, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1782,6 +2149,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$196, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1790,6 +2159,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$197, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1798,6 +2169,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$198, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1806,6 +2179,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$199, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1814,6 +2189,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$200, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1822,6 +2199,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$201, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1830,6 +2209,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$202, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1838,6 +2219,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$203, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1846,6 +2229,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$204, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1854,6 +2239,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$205, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1862,6 +2249,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$206, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1870,6 +2259,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$207, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1878,6 +2269,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$208, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1886,6 +2279,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$209, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1894,6 +2289,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$210, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1902,6 +2299,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$211, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1910,6 +2309,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$212, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1918,6 +2319,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$213, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1926,6 +2329,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$214, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1934,6 +2339,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$215, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1942,6 +2349,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$216, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1950,6 +2359,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$217, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1958,6 +2369,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$218, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1966,6 +2379,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$219, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1974,6 +2389,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$220, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1982,6 +2399,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$221, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1990,6 +2409,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$222, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -1998,6 +2419,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$223, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2006,6 +2429,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$224, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2014,6 +2439,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$225, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2022,6 +2449,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$226, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2030,6 +2459,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$227, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2038,6 +2469,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$228, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2046,6 +2479,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$229, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2054,6 +2489,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$230, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2062,6 +2499,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$231, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2070,6 +2509,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$232, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2078,6 +2519,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$233, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2086,6 +2529,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$234, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2094,6 +2539,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$235, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2102,6 +2549,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$236, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2110,6 +2559,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$237, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2118,6 +2569,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$238, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2126,6 +2579,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$239, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2134,6 +2589,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$240, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2142,6 +2599,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$241, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2150,6 +2609,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$242, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2158,6 +2619,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$243, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2166,6 +2629,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$244, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2174,6 +2639,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$245, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2182,6 +2649,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$246, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2190,6 +2659,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$247, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2198,6 +2669,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$248, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2206,6 +2679,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$249, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2214,6 +2689,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$250, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2222,6 +2699,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$251, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2230,6 +2709,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$252, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2238,6 +2719,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$253, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2246,6 +2729,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$254, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry
@@ -2254,6 +2739,8 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %rdx
         push %rdi
         push %rax
+        mov (APIC_EOI), %rdi
+        movl $$1, (%rdi)
         mov $$255, %rdi
         mov $$int_handler_any, %rax
         jmp interrupt_x_entry

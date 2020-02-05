@@ -23,6 +23,8 @@ HANDLERS = {
     19: 'simd_error',
     20: 'virtualization_exception',
     21: 'control_protection_exception',
+    32: 'spurious',
+    33: 'timer',
 }
 
 
@@ -83,9 +85,9 @@ pub unsafe extern "C" fn {fn_name}() {{
     asm = ''
 
 
-print('pub mod vectors {')
+print('pub mod vector {')
 for (vector, name) in HANDLERS.items():
-    print(f'{INDENT}pub const {name.upper()}: usize = {vector};')
+    print(f'{INDENT}pub const {name.upper()}: u8 = {vector};')
 print('}')
 print()
 
@@ -98,14 +100,17 @@ for vector in range(0, 256):
 print(f'];')
 print()
 
+print('extern "C" { fn interrupt_entry_halt(); }')
 
-function(f'interrupt_entry_halt')
-i(f'cli')
-i(f'hlt')
-emit()
 
 function(f'interrupt_entry_functions')
 l(f'interrupt_entry_unswapped_gs_prefix_start:')
+
+l(f'.global interrupt_entry_halt')
+l(f'interrupt_entry_halt:')
+i(f'cli')
+i(f'hlt')
+
 for vector in range(0, 256):
     if is_reserved(vector):
         continue
@@ -121,6 +126,8 @@ for vector in range(0, 256):
         i(f'push %rdx')
     i(f'push %rdi')
     i(f'push %rax')
+    i(f'mov (APIC_EOI), %rdi')
+    i(f'movl $$1, (%rdi)')
     i(f'mov $${vector}, %rdi')
     i(f'mov $$int_handler_{handler}, %rax')
     if vector != NMI_VECTOR:

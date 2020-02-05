@@ -99,6 +99,17 @@ impl Screen {
     }
 
     fn newline(&mut self) {
+        for x in self.x..FB_WIDTH {
+            unsafe {
+                ptr::write_volatile(
+                    (*self.framebuffer)[self.y][x].get(),
+                    Character {
+                        value: ' ' as u8,
+                        style: self.style,
+                    },
+                );
+            }
+        }
         self.x = 0;
         self.y += 1;
         if self.y >= FB_HEIGHT {
