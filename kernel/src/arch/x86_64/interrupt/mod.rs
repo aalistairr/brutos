@@ -175,8 +175,9 @@ unsafe fn setup_apic() {
     );
     drop(apic);
 
-    if cpuid::leaf::InvariantTsc::get().is_available() {
-        let tsc_freq = cpuid::leaf::CoreCrystalClock::get().tsc_freq().expect("");
+    let tsc_freq = cpuid::leaf::CoreCrystalClock::get().tsc_freq();
+    if cpuid::leaf::InvariantTsc::get().is_available() && tsc_freq.is_some() {
+        let tsc_freq = tsc_freq.expect("failed to get tsc frequency");
         USE_TSC = true;
         println!("tsc frequency: {}Hz", tsc_freq);
         TICKS_PER_10NS = tsc_freq / (1000000000 / 10);
