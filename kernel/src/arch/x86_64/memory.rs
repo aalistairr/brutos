@@ -5,16 +5,19 @@ use core::ptr::NonNull;
 
 use brutos_alloc::{Arc, OutOfMemory};
 use brutos_memory::phys_alloc::bootstrap;
-use brutos_memory::vm::mmu;
+use brutos_memory::vm::{self, mmu};
 use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
 
 use crate::memory::{CutRange, FailedToBootstrap};
 use crate::{AddressSpace, Cx};
 
-pub const KERNEL_VMA: usize = 0xffffffff80000000;
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
 pub const PHYS_IDENT_SIZE: usize = 0x0000400000000000;
 pub const PHYS_IDENT_END: usize = PHYS_IDENT_OFFSET + PHYS_IDENT_SIZE;
+
+pub const VMA_OFFSET: usize = 0xffffffff80000000;
+pub const VMA_SIZE: usize = 0x40000000;
+pub const VMA_END: usize = VMA_OFFSET + VMA_SIZE;
 
 pub const KERNEL_ADDR_SPACE_RANGE: Range<VirtAddr> =
     VirtAddr(0xffff800000000000)..VirtAddr(0xffffffffffffffff);
@@ -129,4 +132,45 @@ impl brutos_memory::vm::Context for Cx {
     }
 }
 
-pub fn create_kernel_mappings(_addr_space: &Pin<Arc<AddressSpace, Cx>>) {}
+pub fn create_kernel_mappings(addr_space: &Pin<Arc<AddressSpace, Cx>>) {
+    addr_space
+        .vm()
+        .create_mapping(
+            PHYS_IDENT_SIZE,
+            vm::Location::Fixed(VirtAddr(PHYS_IDENT_OFFSET)),
+            vm::Source::Raw(PhysAddr(0)),
+            mmu::PageSize::Large,
+            vm::Flags {
+                mapping: vm::mappings::Flags { guard_pages: false },
+                mmu: mmu::Flags {
+                    user_accessible: false,
+                    writable: true,
+                    executable: false,
+                    global: true,
+                    cache_disabled: false,
+                    writethrough: false,
+                },
+            },
+        )
+        .expect("failed to create kernel mappings");
+    addr_space
+        .vm()
+        .create_mapping(
+            VMA_SIZE,
+            vm::Location::Fixed(VirtAddr(VMA_OFFSET)),
+            vm::Source::Raw(PhysAddr(0)),
+            mmu::PageSize::Normal,
+            vm::Flags {
+                mapping: vm::mappings::Flags { guard_pages: false },
+                mmu: mmu::Flags {
+                    user_accessible: false,
+                    writable: true,
+                    executable: true,
+                    global: true,
+                    cache_disabled: false,
+                    writethrough: false,
+                },
+            },
+        )
+        .expect("failed to create kernel mappings");
+}
