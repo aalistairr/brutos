@@ -35,6 +35,9 @@ pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     let available_memory = memory::bootstrap(mmap).expect("Failed to bootstrap physical memory");
     println!("{} bytes available", available_memory);
     create_kernel_address_space().expect("failed to create kernel address space");
+
+    arch::initialize_with_address_space();
+
     create_idle_task().expect("failed to create idle task");
 
     for i in 0..32 {

@@ -61,7 +61,7 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
     screen().lock().clear();
 
     unsafe {
-        task::arch::load_gdt();
+        task::arch::initialize_and_load_gdt();
         self::interrupt::initialize();
         task::arch::current_task_dec_critical_count();
         pc::msr::map::<pc::msr::Ia32Efer, _>(|x| x.with_nx_enabled(true));
@@ -88,6 +88,10 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
     unsafe {
         crate::main(mmap);
     }
+}
+
+pub unsafe fn initialize_with_address_space() {
+    self::interrupt::initialize_with_address_space();
 }
 
 #[no_mangle]

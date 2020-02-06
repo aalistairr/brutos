@@ -37,11 +37,11 @@ impl Idt {
         let this = this.get_ref() as *const Self as usize;
         asm!("
             sub $$0x10, %rsp
-            mov $0, 0x6(%rsp)
-            mov $1, 0x8(%rsp)
+            mov %ax, 0x6(%rsp)
+            mov %rdi, 0x8(%rsp)
             lidtq 0x6(%rsp)
             add $$0x10, %rsp
-        " :: "r" (limit), "r" (this) :: "volatile");
+        " :: "{ax}" (limit), "{rdi}" (this) :: "volatile");
     }
 }
 

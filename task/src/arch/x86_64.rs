@@ -3,6 +3,10 @@ use core::sync::atomic::{fence, AtomicBool, Ordering};
 
 use brutos_alloc::Arc;
 use brutos_memory::VirtAddr;
+use brutos_platform_pc::{
+    gdt,
+    tss::{self, Tss},
+};
 
 use crate::{Context, EntryPoint, State, Task};
 
@@ -240,39 +244,58 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
     Cx::leave_critical();
 }
 
-#[cfg(target_os = "bare")]
-global_asm!(
-    "
-    .section .rodata
-    .align 8
-    GDT:
-    .quad 0x0                   // 0x00 -> null
-    .quad 0x0020980000000000    // 0x08 -> code (kernel)
-    .quad 0x0000920000000000    // 0x10 -> data (kernel)
-    .quad 0x0020f80000000000    // 0x18 -> code (user)
-    .quad 0x0000f20000000000    // 0x20 -> data (user)
-    GDT_end:
-    
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .byte 0
-    .global GDTR
-    GDTR:
-    .short GDT_end - GDT - 1
-    .quad GDT
-"
-);
-
 pub const GDT_NULL: u16 = 0x0;
 pub const GDT_CODE_KERN: u16 = 0x8;
 pub const GDT_DATA_KERN: u16 = 0x10;
 pub const GDT_CODE_USER: u16 = 0x18;
 pub const GDT_DATA_USER: u16 = 0x20;
+pub const GDT_TSS: u16 = 0x28;
 
-#[inline]
-pub unsafe fn load_gdt() {
-    asm!("lgdt GDTR" :::: "volatile");
+#[repr(C, align(8))]
+pub struct Gdt {
+    null: u64,
+    code_kern: gdt::CDDescriptor,
+    data_kern: gdt::CDDescriptor,
+    code_user: gdt::CDDescriptor,
+    data_user: gdt::CDDescriptor,
+    tss: tss::Descriptor,
+}
+
+unsafe fn gdt_mut() -> Pin<&'static mut Gdt> {
+    static mut GDT: Gdt = Gdt {
+        null: 0,
+        code_kern: gdt::CDDescriptor::new(gdt::CDType::Code)
+            .with_present(true)
+            .with_long(true)
+            .with_dpl(0),
+        data_kern: gdt::CDDescriptor::new(gdt::CDType::Data)
+            .with_present(true)
+            .with_long(true)
+            .with_dpl(0),
+        code_user: gdt::CDDescriptor::new(gdt::CDType::Code)
+            .with_present(true)
+            .with_long(true)
+            .with_dpl(3),
+        data_user: gdt::CDDescriptor::new(gdt::CDType::Data)
+            .with_present(true)
+            .with_long(true)
+            .with_dpl(3),
+        tss: tss::Descriptor::new(tss::Type::TssAvailable).with_present(false),
+    };
+    Pin::new_unchecked(&mut GDT)
+}
+
+pub unsafe fn tss_mut() -> Pin<&'static mut Tss> {
+    static mut TSS: tss::Tss = Tss::new();
+    Pin::new_unchecked(&mut TSS)
+}
+
+pub unsafe fn initialize_and_load_gdt() {
+    gdt_mut().tss = tss::Descriptor::new(tss::Type::TssAvailable)
+        .with_present(true)
+        .with_dpl(3)
+        .with_tss_size(core::mem::size_of::<tss::Tss>())
+        .with_tss(Some(tss_mut().get_mut().into()));
+    gdt::load(gdt_mut().as_ref());
+    tss::load(GDT_TSS);
 }

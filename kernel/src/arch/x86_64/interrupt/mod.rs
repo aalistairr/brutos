@@ -9,7 +9,7 @@ use brutos_platform_pc::interrupt::apic::{self, Apic};
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
 use brutos_platform_pc::msr;
 use brutos_sync::spinlock::Spinlock;
-use brutos_task::arch::GDT_CODE_KERN;
+use brutos_task::arch::{tss_mut, GDT_CODE_KERN};
 
 use crate::Cx;
 
@@ -146,6 +146,17 @@ pub unsafe fn initialize() {
     Idt::load(idt_mut().as_ref());
     setup_apic();
     setup_idt();
+}
+
+const NMI_IST: usize = 1;
+
+pub unsafe fn initialize_with_address_space() {
+    use brutos_task::Context;
+    let nmi_stack = Cx::default()
+        .alloc_stack()
+        .expect("failed to allocate NMI stack")
+        .0 as u64;
+    tss_mut().as_mut().ist1 = nmi_stack;
 }
 
 pub unsafe fn unmask() {
@@ -315,6 +326,9 @@ unsafe fn setup_idt() {
             .with_segment(brutos_task::arch::GDT_CODE_KERN)
             .with_ty(Type::Interrupt)
             .with_present(true);
+        if i == vector::NMI as usize {
+            idt[i].set_ist(NMI_IST);
+        }
     }
 }
 

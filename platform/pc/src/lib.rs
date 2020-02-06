@@ -4,6 +4,8 @@
 
 pub mod cpuid;
 pub mod fb;
+pub mod gdt;
 pub mod interrupt;
 pub mod io;
 pub mod msr;
+pub mod tss;
