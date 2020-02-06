@@ -22,29 +22,36 @@ pub trait Context: Default + AllocOne<ArcInner<Task<Self>>> + brutos_sync::Criti
     unsafe fn dealloc_stack(&mut self, stack: VirtAddr);
 
     fn idle_task(&mut self) -> &Pin<Arc<Task<Self>, Self>>;
+
+    #[must_use]
+    fn activate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool;
+    fn deactivate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>);
+    #[must_use]
+    fn is_task_active(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool;
+    #[must_use]
+    fn is_task_in_kernel(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool;
+    fn destroy_task(&mut self, task: Pin<Arc<Task<Self>, Self>>);
 }
 
 pub struct Task<Cx: Context> {
     pub addr_space: Cx::AddrSpace,
     pub id: usize,
     pub switch_lock: Spinlock<(), Cx>,
-    state: UnsafeCell<State<Cx>>,
+    pub state: UnsafeCell<State<Cx>>,
     waitq_node: Node<WaitQSel<Cx>>,
-    process_node: Node<ProcessSel<Cx>>,
 }
 
 brutos_util_macros::selector!(pub WaitQSel<Cx: Context>: Arc<Task<Cx>, Cx> => waitq_node);
-brutos_util_macros::selector!(pub ProcessSel<Cx: Context>: Arc<Task<Cx>, Cx> => process_node);
 
 unsafe impl<Cx: Send + Context> Send for Task<Cx> {}
 unsafe impl<Cx: Send + Context> Sync for Task<Cx> {}
 
 #[repr(C)]
 pub struct State<Cx: Context> {
-    regs: self::arch::Regs, // sizeof(regs) % sizeof(usize) == 0
-    kernel_stack: VirtAddr, // sizeof(regs) + 0x00
-    critical_count: usize,  // sizeof(regs) + sizeof(usize)
-    task: *const Task<Cx>,  // sizeof(regs) + 2 * sizeof(usize)
+    pub regs: self::arch::Regs, // sizeof(regs) % sizeof(usize) == 0
+    kernel_stack: VirtAddr,     // sizeof(regs) + 0x00
+    critical_count: usize,      // sizeof(regs) + sizeof(usize)
+    task: *const Task<Cx>,      // sizeof(regs) + 2 * sizeof(usize)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -72,7 +79,6 @@ impl<Cx: Context> Task<Cx> {
                 task: core::ptr::null(),
             }),
             waitq_node: Node::new(),
-            process_node: Node::new(),
         })
         .map_err(|(e, _)| e)?;
         unsafe {

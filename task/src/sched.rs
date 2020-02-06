@@ -30,13 +30,17 @@ impl<Cx: Context> Scheduler<Cx> {
     }
 
     pub unsafe fn deschedule(self: Pin<&Self>) -> Pin<Arc<Task<Cx>, Cx>> {
-        self.current
+        let task = self
+            .current
             .lock()
             .take()
-            .expect("Already descheduled the current task")
+            .expect("Already descheduled the current task");
+        Cx::default().deactivate_task(&task);
+        task
     }
 
     pub unsafe fn schedule(self: Pin<&Self>, task: Pin<Arc<Task<Cx>, Cx>>) {
+        assert!(!Cx::default().is_task_active(&task));
         self.waiting().lock().as_mut().push_back(task);
     }
 
@@ -46,12 +50,14 @@ impl<Cx: Context> Scheduler<Cx> {
             current.is_none(),
             "the current task must be descheduled before calling `unlock_and_yield`"
         );
-        let next_task = self
-            .waiting()
-            .lock()
-            .as_mut()
-            .pop_front()
-            .unwrap_or_else(|| Cx::default().idle_task().clone());
+        let mut cx = Cx::default();
+        let next_task = loop {
+            match self.waiting().lock().as_mut().pop_front() {
+                None => break cx.idle_task().clone(),
+                Some(task) if cx.activate_task(&task) || cx.is_task_in_kernel(&task) => break task,
+                Some(task) => cx.destroy_task(task),
+            }
+        };
         let next_state = next_task.state.get();
         *current = Some(next_task);
         drop(current); // next_state remains valid until the task is switched as Scheduler.current is not shared between CPUs

@@ -8,15 +8,16 @@
 use core::ops::Range;
 use core::pin::Pin;
 use core::ptr::NonNull;
-use core::sync::atomic::AtomicBool;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory, PinWeak};
 use brutos_memory::arch::PAGE_SIZE;
 use brutos_memory::slab_alloc as slab;
 use brutos_memory::vm;
 use brutos_memory::{AllocMappedPage, AllocPhysPage, Order, PhysAddr, VirtAddr};
+use brutos_sync::mpsc;
 use brutos_sync::mutex::{Mutex, PinMutex};
-use brutos_sync::spinlock::SpinlockGuard;
+use brutos_sync::spinlock::{Spinlock, SpinlockGuard};
 use brutos_task::{sched, Task};
 
 const STACK_SIZE: usize = 16 * PAGE_SIZE;
@@ -39,11 +40,14 @@ pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     arch::initialize_with_address_space();
 
     create_idle_task().expect("failed to create idle task");
+    create_janitor().expect("failed to create janitor");
 
     for i in 0..32 {
         scheduler().as_ref().schedule(
             Task::new(
-                Arc::pin_downgrade(AddressSpace::kernel()),
+                Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
+                    AddressSpace::kernel(),
+                ))),
                 0,
                 brutos_task::EntryPoint::Kernel(VirtAddr(start_task as usize), i, 0),
             )
@@ -238,12 +242,19 @@ impl AddressSpace {
     }
 }
 
+pub enum TaskAddrSpace {
+    Active(Pin<Arc<AddressSpace, Cx>>),
+    Inactive(PinWeak<AddressSpace, Cx>),
+}
+
 static mut IDLE_TASK: core::mem::MaybeUninit<Pin<Arc<Task<Cx>, Cx>>> =
     core::mem::MaybeUninit::uninit();
 
 unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
     IDLE_TASK.write(Task::new(
-        Arc::pin_downgrade(AddressSpace::kernel()),
+        Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
+            AddressSpace::kernel(),
+        ))),
         !0,
         brutos_task::EntryPoint::Kernel(
             arch::idle_task_entry_addr(),
@@ -254,8 +265,60 @@ unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
     Ok(())
 }
 
+enum JanitorSel {}
+
+impl mpsc::Context<JanitorSel> for Cx {
+    type ChannelSel = brutos_task::WaitQSel<Cx>;
+}
+
+static IS_JANITOR_CHANNEL_ALLOCATED: AtomicBool = AtomicBool::new(false);
+static mut JANITOR_CHANNEL: core::mem::MaybeUninit<ArcInner<mpsc::Channel<JanitorSel, Cx>>> =
+    core::mem::MaybeUninit::uninit();
+
+unsafe impl AllocOne<ArcInner<mpsc::Channel<JanitorSel, Cx>>> for Cx {
+    unsafe fn alloc(
+        &mut self,
+    ) -> Result<NonNull<ArcInner<mpsc::Channel<JanitorSel, Cx>>>, OutOfMemory> {
+        IS_JANITOR_CHANNEL_ALLOCATED
+            .compare_exchange(false, true, Ordering::Acquire, Ordering::Relaxed)
+            .expect("already allocated the janitor channel");
+        Ok(NonNull::new_unchecked(JANITOR_CHANNEL.as_mut_ptr()))
+    }
+
+    unsafe fn dealloc(&mut self, _: NonNull<ArcInner<mpsc::Channel<JanitorSel, Cx>>>) {
+        IS_JANITOR_CHANNEL_ALLOCATED.store(false, Ordering::Release);
+    }
+}
+
+static mut JANITOR_TX: Option<mpsc::Sender<JanitorSel, Cx>> = None;
+
+unsafe fn create_janitor() -> Result<(), OutOfMemory> {
+    let (tx, rx) = mpsc::channel()?;
+    JANITOR_TX = Some(tx);
+    let janitor = Task::new(
+        Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
+            AddressSpace::kernel(),
+        ))),
+        !0 - 1,
+        brutos_task::EntryPoint::Kernel(
+            VirtAddr(janitor as usize),
+            mpsc::Receiver::into_raw(rx) as usize,
+            0,
+        ),
+    )?;
+    scheduler().as_ref().schedule(janitor);
+    Ok(())
+}
+
+extern "C" fn janitor(rx_raw: *const mpsc::Channel<JanitorSel, Cx>) -> ! {
+    let mut rx = unsafe { mpsc::Receiver::from_raw(rx_raw) };
+    loop {
+        let _: Pin<Arc<Task<Cx>, Cx>> = rx.recv();
+    }
+}
+
 impl brutos_task::Context for Cx {
-    type AddrSpace = PinWeak<AddressSpace, Cx>;
+    type AddrSpace = Spinlock<TaskAddrSpace, Cx>;
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory> {
         use vm::mappings::MapError;
@@ -307,6 +370,47 @@ impl brutos_task::Context for Cx {
 
     fn idle_task(&mut self) -> &Pin<Arc<Task<Cx>, Cx>> {
         unsafe { &*IDLE_TASK.as_ptr() }
+    }
+
+    fn activate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
+        let mut addr_space = task.addr_space.lock();
+        match &*addr_space {
+            TaskAddrSpace::Inactive(task) => match task.upgrade() {
+                Some(task) => {
+                    *addr_space = TaskAddrSpace::Active(task);
+                    true
+                }
+                None => false,
+            },
+            TaskAddrSpace::Active(_) => panic!("task is already active"),
+        }
+    }
+
+    fn deactivate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>) {
+        let mut addr_space = task.addr_space.lock();
+        match &*addr_space {
+            TaskAddrSpace::Active(task) => {
+                *addr_space = TaskAddrSpace::Inactive(Arc::pin_downgrade(task))
+            }
+            TaskAddrSpace::Inactive(_) => panic!("task is already inactive"),
+        }
+    }
+
+    fn is_task_active(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
+        match *task.addr_space.lock() {
+            TaskAddrSpace::Active(_) => true,
+            TaskAddrSpace::Inactive(_) => false,
+        }
+    }
+
+    fn is_task_in_kernel(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
+        unsafe { (*task.state.get()).regs.cs == brutos_task::arch::GDT_CODE_KERN }
+    }
+
+    fn destroy_task(&mut self, task: Pin<Arc<Task<Self>, Self>>) {
+        unsafe {
+            JANITOR_TX.as_ref().unwrap().send(task);
+        }
     }
 }
 

@@ -58,6 +58,16 @@ pub fn channel<S, Cx: Context<S>>() -> Result<(Sender<S, Cx>, Receiver<S, Cx>), 
 }
 
 impl<S, Cx: Context<S>> Receiver<S, Cx> {
+    pub unsafe fn from_raw(ptr: *const Channel<S, Cx>) -> Receiver<S, Cx> {
+        Receiver {
+            channel: Pin::new_unchecked(Arc::from_raw(ptr)),
+        }
+    }
+
+    pub fn into_raw(this: Receiver<S, Cx>) -> *const Channel<S, Cx> {
+        unsafe { Arc::into_raw(Pin::into_inner_unchecked(this.channel)) }
+    }
+
     pub fn recv(&mut self) -> <Cx::ChannelSel as Sel>::Immovable {
         let mut inner = self.channel.as_ref().inner().lock();
         if let Some(value) = inner.as_mut().list().pop_front() {
@@ -82,7 +92,17 @@ impl<S, Cx: Context<S>> Receiver<S, Cx> {
 }
 
 impl<S, Cx: Context<S>> Sender<S, Cx> {
-    pub fn send(&mut self, value: <Cx::ChannelSel as Sel>::Immovable) {
+    pub unsafe fn from_raw(ptr: *const Channel<S, Cx>) -> Sender<S, Cx> {
+        Sender {
+            channel: Pin::new_unchecked(Arc::from_raw(ptr)),
+        }
+    }
+
+    pub fn into_raw(this: Sender<S, Cx>) -> *const Channel<S, Cx> {
+        unsafe { Arc::into_raw(Pin::into_inner_unchecked(this.channel)) }
+    }
+
+    pub fn send(&self, value: <Cx::ChannelSel as Sel>::Immovable) {
         let mut inner = self.channel.as_ref().inner().lock();
         inner.as_mut().list().push_back(value);
         let waiting_task = inner.as_mut().waiting_task().take();

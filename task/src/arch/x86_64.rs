@@ -49,36 +49,36 @@ impl<Cx: Context> State<Cx> {
 #[derive(Default)]
 #[repr(C)]
 pub struct Regs {
-    rax: u64,         // 0x00
-    rbx: u64,         // 0x08
-    rcx: u64,         // 0x10
-    rdx: u64,         // 0x18
-    rdi: u64,         // 0x20
-    rsi: u64,         // 0x28
-    rbp: u64,         // 0x30
-    rsp: u64,         // 0x38
-    r8: u64,          // 0x40
-    r9: u64,          // 0x48
-    r10: u64,         // 0x50
-    r11: u64,         // 0x58
-    r12: u64,         // 0x60
-    r13: u64,         // 0x68
-    r14: u64,         // 0x70
-    r15: u64,         // 0x78
-    rip: u64,         // 0x80
-    rflags: u64,      // 0x88
-    fs_base: u64,     // 0x90
-    gs_base: u64,     // 0x98
-    gs_base_alt: u64, // 0xa0
-    cs: u16,          // 0xa8
-    ds: u16,          // 0xaa
-    ss: u16,          // 0xac
-    es: u16,          // 0xae
-    fs: u16,          // 0xb0
-    gs: u16,          // 0xb2
-    _padding0: u16,   // 0xb4
-    _padding1: u16,   // 0xb6
-                      // 0xb8
+    pub rax: u64,         // 0x00
+    pub rbx: u64,         // 0x08
+    pub rcx: u64,         // 0x10
+    pub rdx: u64,         // 0x18
+    pub rdi: u64,         // 0x20
+    pub rsi: u64,         // 0x28
+    pub rbp: u64,         // 0x30
+    pub rsp: u64,         // 0x38
+    pub r8: u64,          // 0x40
+    pub r9: u64,          // 0x48
+    pub r10: u64,         // 0x50
+    pub r11: u64,         // 0x58
+    pub r12: u64,         // 0x60
+    pub r13: u64,         // 0x68
+    pub r14: u64,         // 0x70
+    pub r15: u64,         // 0x78
+    pub rip: u64,         // 0x80
+    pub rflags: u64,      // 0x88
+    pub fs_base: u64,     // 0x90
+    pub gs_base: u64,     // 0x98
+    pub gs_base_alt: u64, // 0xa0
+    pub cs: u16,          // 0xa8
+    pub ds: u16,          // 0xaa
+    pub ss: u16,          // 0xac
+    pub es: u16,          // 0xae
+    pub fs: u16,          // 0xb0
+    pub gs: u16,          // 0xb2
+    _padding0: u16,       // 0xb4
+    _padding1: u16,       // 0xb6
+                          // 0xb8
 }
 
 impl Regs {
