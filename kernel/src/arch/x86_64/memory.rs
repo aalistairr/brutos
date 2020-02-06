@@ -12,7 +12,7 @@ use crate::memory::{CutRange, FailedToBootstrap};
 use crate::{AddressSpace, Cx};
 
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
-pub const PHYS_IDENT_SIZE: usize = 0x0000400000000000;
+pub const PHYS_IDENT_SIZE: usize = 0x0000008000000000;
 pub const PHYS_IDENT_END: usize = PHYS_IDENT_OFFSET + PHYS_IDENT_SIZE;
 
 pub const VMA_OFFSET: usize = 0xffffffff80000000;
