@@ -1,7 +1,11 @@
 ARCH ?= x86_64
 TARGET ?= $(ARCH)-unknown-brutos-kernel
+VMWARE_VMRUN ?= /Applications/VMware Fusion.app/Contents/Library/vmrun
+VMWARE_VMS_DIR ?= $(HOME)/Virtual Machines.localized
 
 CFG ?= debug
+
+VMWARE_VMX ?= $(VMWARE_VMS_DIR)/BrutOS ($(CFG)).vmwarevm/BrutOS ($(CFG)).vmx
 
 ifeq ($(CFG),release)
 CARGO_FLAGS += --release
@@ -46,6 +50,10 @@ qemu: $(BUILD_DIR)/brutos-kernel.iso
 bochs: $(BUILD_DIR)/brutos-kernel.iso
 	bochs -f assets/bochsrc.$(CFG)
 
+.PHONY: vmware
+vmware: $(BUILD_DIR)/brutos-kernel.vmdk
+	"$(VMWARE_VMRUN)" list | grep "$(VMWARE_VMX)" && "$(VMWARE_VMRUN)" stop "$(VMWARE_VMX)" hard || true
+	"$(VMWARE_VMRUN)" start "$(VMWARE_VMX)"
 
 .PHONY: always-run
 always-run:
