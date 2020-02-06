@@ -2,6 +2,7 @@ use core::cmp::max;
 use core::convert::TryInto;
 use core::pin::Pin;
 
+use brutos_memory::vm::{FaultConditions, PageFaultError};
 use brutos_memory::{PhysAddr, VirtAddr};
 use brutos_platform_pc as pc;
 use brutos_platform_pc::cpuid;
@@ -10,6 +11,7 @@ use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
 use brutos_platform_pc::msr;
 use brutos_sync::spinlock::Spinlock;
 use brutos_task::arch::{tss_mut, GDT_CODE_KERN};
+use brutos_util_macros::bitfield;
 
 use crate::Cx;
 
@@ -93,6 +95,13 @@ fn panic(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     );
 }
 
+unsafe fn kill_addr_space() {
+    match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
+        crate::TaskAddrSpace::Active(addr_space) => addr_space.kill(),
+        _ => unreachable!(),
+    }
+}
+
 interrupt_handler!(int_handler_kill => kill);
 fn kill(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     if stack_frame.cs == GDT_CODE_KERN {
@@ -103,10 +112,7 @@ fn kill(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     }
     unsafe {
         crate::arch::interrupt::unmask();
-    }
-    match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
-        crate::TaskAddrSpace::Active(addr_space) => addr_space.kill(),
-        _ => unreachable!(),
+        kill_addr_space();
     }
 }
 
@@ -116,6 +122,16 @@ fn cr2() -> VirtAddr {
         asm!("mov %cr2, $0" : "=r" (addr) ::: "volatile");
     }
     VirtAddr(addr)
+}
+
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+    pub struct PageFaultErrorCode(usize);
+
+    pub field present: bool => 0;
+    pub field write: bool => 1;
+    pub field user_mode: bool => 2;
+    pub field instruction_fetch: bool => 4;
 }
 
 interrupt_handler!(int_handler_page_fault => page_fault);
@@ -131,7 +147,22 @@ fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     unsafe {
         crate::arch::interrupt::unmask();
     }
-    unimplemented!()
+    let addr_space = match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
+        crate::TaskAddrSpace::Active(addr_space) => addr_space.clone(),
+        _ => unreachable!(),
+    };
+    let error = PageFaultErrorCode(error);
+    let fault_conditions = FaultConditions {
+        was_present: error.is_present(),
+        was_write: error.is_write(),
+        was_instruction_fetch: error.is_instruction_fetch(),
+        was_user_access: error.is_user_mode(),
+    };
+    match addr_space.vm().page_fault(fault_addr, fault_conditions) {
+        Ok(()) => (),
+        Err(PageFaultError::InvalidAccess) => unsafe { kill_addr_space() },
+        Err(e) => panic!("error in page fault: {:?}", e),
+    }
 }
 
 #[export_name = "int_handler_spurious"]

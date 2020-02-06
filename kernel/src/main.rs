@@ -1,5 +1,11 @@
 #![feature(asm, global_asm, naked_functions)]
-#![feature(const_raw_ptr_deref, const_mut_refs)]
+#![feature(
+    const_raw_ptr_deref,
+    const_mut_refs,
+    const_if_match,
+    const_fn,
+    const_panic
+)]
 #![feature(maybe_uninit_extra)]
 #![feature(format_args_nl)]
 #![no_std]
