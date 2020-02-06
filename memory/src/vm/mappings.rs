@@ -151,6 +151,7 @@ impl<T, Cx: Context<T>> Mappings<T, Cx> {
             if mapping.range.start == at {
                 return Ok(mapping.unlink());
             }
+            next_mapping = mapping.next().ok();
         }
         Err(UnmapError::NotStartOfMapping)
     }
