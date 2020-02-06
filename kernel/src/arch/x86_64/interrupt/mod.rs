@@ -62,23 +62,52 @@ pub struct InterruptStackFrame {
     ss: usize,
 }
 
-#[export_name = "int_handler_panic"]
-pub extern "C" fn panic(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+unsafe fn check_task() {
+    if !brutos_task::Context::is_task_active(&mut Cx::default(), &*brutos_task::Task::current()) {
+        <Cx as brutos_sync::Critical>::enter_critical();
+        crate::destroy_task(crate::scheduler().deschedule());
+        <Cx as brutos_sync::waitq::Context>::unlock_and_yield(
+            &core::sync::atomic::AtomicBool::new(true),
+        );
+        unreachable!()
+    }
+}
+
+macro_rules! interrupt_handler {
+    ($name:ident => $f:ident) => {
+        #[no_mangle]
+        pub extern "C" fn $name(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+            $f(vector, stack_frame, error);
+            unsafe {
+                check_task();
+            }
+        }
+    };
+}
+
+interrupt_handler!(int_handler_panic => panic);
+fn panic(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     panic!(
         "don't know how to handle interrupt (vector={}, cs={:#x}, %rip={:#x}, error={:#x})",
         vector, stack_frame.cs, stack_frame.rip, error
     );
 }
 
-#[export_name = "int_handler_kill"]
-pub extern "C" fn kill(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+interrupt_handler!(int_handler_kill => kill);
+fn kill(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     if stack_frame.cs == GDT_CODE_KERN {
         panic!(
             "fatal exception in kernel (vector={}, %rip={:#x}, error={:#x})",
             vector, stack_frame.rip, error
         );
     }
-    unimplemented!()
+    unsafe {
+        crate::arch::interrupt::unmask();
+    }
+    match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
+        crate::TaskAddrSpace::Active(addr_space) => addr_space.kill(),
+        _ => unreachable!(),
+    }
 }
 
 fn cr2() -> VirtAddr {
@@ -89,8 +118,8 @@ fn cr2() -> VirtAddr {
     VirtAddr(addr)
 }
 
-#[export_name = "int_handler_page_fault"]
-pub extern "C" fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
+interrupt_handler!(int_handler_page_fault => page_fault);
+fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     let fault_addr = cr2();
     let critical_count = unsafe { brutos_task::arch::current_task_get_critical_count() };
     if critical_count > 0 {
@@ -100,7 +129,7 @@ pub extern "C" fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, 
         );
     }
     unsafe {
-        pc::interrupt::sti();
+        crate::arch::interrupt::unmask();
     }
     unimplemented!()
 }
@@ -108,8 +137,8 @@ pub extern "C" fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, 
 #[export_name = "int_handler_spurious"]
 pub extern "C" fn spurious() {}
 
-#[export_name = "int_handler_timer"]
-pub extern "C" fn timer(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
+interrupt_handler!(int_handler_timer => timer);
+fn timer(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
     let critical_count = unsafe { brutos_task::arch::current_task_get_critical_count() };
     if critical_count > 0 {
         panic!("timer interrupt in critical section");
@@ -119,8 +148,8 @@ pub extern "C" fn timer(_vector: usize, _stack_frame: &InterruptStackFrame, _err
     }
 }
 
-#[export_name = "int_handler_any"]
-pub extern "C" fn any(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
+interrupt_handler!(int_handler_any => any);
+fn any(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
     unimplemented!()
 }
 

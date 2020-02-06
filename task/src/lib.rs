@@ -5,6 +5,7 @@
 use core::cell::UnsafeCell;
 use core::mem::ManuallyDrop;
 use core::pin::Pin;
+use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
 use brutos_memory::VirtAddr;
@@ -36,6 +37,7 @@ pub trait Context: Default + AllocOne<ArcInner<Task<Self>>> + brutos_sync::Criti
 pub struct Task<Cx: Context> {
     pub addr_space: Cx::AddrSpace,
     pub id: usize,
+    is_alive: AtomicBool,
     pub switch_lock: Spinlock<(), Cx>,
     pub state: UnsafeCell<State<Cx>>,
     waitq_node: Node<WaitQSel<Cx>>,
@@ -71,6 +73,7 @@ impl<Cx: Context> Task<Cx> {
         let task = Arc::pin(Task {
             addr_space,
             id,
+            is_alive: AtomicBool::new(true),
             switch_lock: Spinlock::new(()),
             state: UnsafeCell::new(State {
                 regs: Default::default(),
@@ -93,6 +96,14 @@ impl<Cx: Context> Task<Cx> {
                 Self::current_task_ptr(),
             ))))
         }
+    }
+
+    pub fn kill(&self) {
+        self.is_alive.store(false, Ordering::Release);
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.is_alive.load(Ordering::Acquire)
     }
 }
 

@@ -208,6 +208,7 @@ fn initialize_addr_space_allocator() {
 }
 
 pub struct AddressSpace {
+    is_alive: AtomicBool,
     vm: brutos_memory::vm::Space<Cx>,
 }
 
@@ -217,6 +218,7 @@ static mut KERNEL_ADDR_SPACE: core::mem::MaybeUninit<Pin<Arc<AddressSpace, Cx>>>
 unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
     let addr_space = KERNEL_ADDR_SPACE.write(
         Arc::pin(AddressSpace {
+            is_alive: AtomicBool::new(true),
             vm: brutos_memory::vm::Space::new(
                 crate::arch::memory::KERNEL_ADDR_SPACE_RANGE,
                 crate::arch::memory::create_kernel_mmu_tables()?,
@@ -239,6 +241,14 @@ impl AddressSpace {
 
     pub fn vm<'a>(self: &'a Pin<Arc<AddressSpace, Cx>>) -> Pin<&'a brutos_memory::vm::Space<Cx>> {
         unsafe { self.as_ref().map_unchecked(|x| &x.vm) }
+    }
+
+    pub fn kill(&self) {
+        self.is_alive.store(false, Ordering::Release);
+    }
+
+    pub fn is_alive(&self) -> bool {
+        self.is_alive.load(Ordering::Acquire)
     }
 }
 
@@ -373,32 +383,32 @@ impl brutos_task::Context for Cx {
     }
 
     fn activate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
-        let mut addr_space = task.addr_space.lock();
-        match &*addr_space {
-            TaskAddrSpace::Inactive(task) => match task.upgrade() {
-                Some(task) => {
-                    *addr_space = TaskAddrSpace::Active(task);
+        let mut addr_space_guard = task.addr_space.lock();
+        match &*addr_space_guard {
+            TaskAddrSpace::Inactive(addr_space) => match addr_space.upgrade() {
+                Some(addr_space) if addr_space.is_alive() => {
+                    *addr_space_guard = TaskAddrSpace::Active(addr_space);
                     true
                 }
-                None => false,
+                _ => false,
             },
             TaskAddrSpace::Active(_) => panic!("task is already active"),
         }
     }
 
     fn deactivate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>) {
-        let mut addr_space = task.addr_space.lock();
-        match &*addr_space {
-            TaskAddrSpace::Active(task) => {
-                *addr_space = TaskAddrSpace::Inactive(Arc::pin_downgrade(task))
+        let mut addr_space_guard = task.addr_space.lock();
+        match &*addr_space_guard {
+            TaskAddrSpace::Active(addr_space) => {
+                *addr_space_guard = TaskAddrSpace::Inactive(Arc::pin_downgrade(addr_space))
             }
             TaskAddrSpace::Inactive(_) => panic!("task is already inactive"),
         }
     }
 
     fn is_task_active(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
-        match *task.addr_space.lock() {
-            TaskAddrSpace::Active(_) => true,
+        match &*task.addr_space.lock() {
+            TaskAddrSpace::Active(addr_space) => addr_space.is_alive(),
             TaskAddrSpace::Inactive(_) => false,
         }
     }
@@ -408,9 +418,13 @@ impl brutos_task::Context for Cx {
     }
 
     fn destroy_task(&mut self, task: Pin<Arc<Task<Self>, Self>>) {
-        unsafe {
-            JANITOR_TX.as_ref().unwrap().send(task);
-        }
+        destroy_task(task);
+    }
+}
+
+fn destroy_task(task: Pin<Arc<Task<Cx>, Cx>>) {
+    unsafe {
+        JANITOR_TX.as_ref().unwrap().send(task);
     }
 }
 
