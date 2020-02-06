@@ -125,6 +125,7 @@ impl Regs {
 }
 
 pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) {
+    tss_mut().rsp[0] = (*to).kernel_stack.0 as u64;
     fence(Ordering::SeqCst);
     asm!("
         // Save state
