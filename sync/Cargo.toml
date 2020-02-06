@@ -11,4 +11,6 @@ default = []
 std = []
 
 [dependencies]
+brutos-alloc = { path = "../alloc" }
 brutos-util = { path = "../util" }
+brutos-util-macros = { path = "../util/macros" }

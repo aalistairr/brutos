@@ -2,6 +2,7 @@
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 
 pub mod condvar;
+pub mod mpsc;
 pub mod mutex;
 pub mod spinlock;
 pub mod waitq;
