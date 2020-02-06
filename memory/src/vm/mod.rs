@@ -187,9 +187,8 @@ where
             Location::Aligned(align) => assert!(align.is_aligned(page_size.order().size())),
             Location::Fixed(addr) => assert!(addr.is_aligned(page_size.order().size())),
         }
-        let mapping = self
-            .mappings()
-            .lock()
+        let mut mappings = self.mappings().lock();
+        let mapping = mappings
             .as_mut()
             .create(
                 size,
@@ -206,6 +205,7 @@ where
             .clone();
         mapping.as_ref().data().status().initialize();
         mapping.as_ref().data().status_condvar().initialize();
+        drop(mappings);
         Ok(mapping)
     }
 
