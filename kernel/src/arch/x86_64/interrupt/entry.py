@@ -199,19 +199,39 @@ i(f'push %r11')  # +0x00
 n()
 i(f'cmpq $${GDT_CODE_KERN}, 0x50(%rsp)')
 i(f'jne 1f')
-i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_start, 0x48(%rsp)')
-i(f'jb 2f')
-i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_end, 0x48(%rsp)')
-i(f'jb 1f')
-i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_start, 0x48(%rsp)')
-i(f'jb 2f')
-i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_end, 0x48(%rsp)')
-i(f'jnb 2f')
 n()
+
+i(f'mov 0x48(%rsp), %r10')
+
+i(f'cmpq $$syscall_unswapped_gs_prefix_start, %r10')
+i(f'jb 1f')
+i(f'cmpq $$syscall_unswapped_gs_prefix_end, %r10')
+i(f'jb 2f')
+
 l(f'1:')
+i(f'cmpq $$syscall_unswapped_gs_postfix_start, %r10')
+i(f'jb 1f')
+i(f'cmpq $$syscall_unswapped_gs_postfix_end, %r10')
+i(f'jb 2f')
+
+l(f'1:')
+i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_start, %r10')
+i(f'jb 1f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_prefix_end, %r10')
+i(f'jb 2f')
+
+l(f'1:')
+i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_start, %r10')
+i(f'jb 1f')
+i(f'cmpq $$interrupt_entry_unswapped_gs_postfix_end, %r10')
+i(f'jae 3f')
+
+n()
+l(f'2:')
 i(f'swapgs')
 i(f'movb $$1, 0x53(%rsp)')  # store whether we did a swapgs above CS
-l(f'2:')
+l(f'3:')
+
 n()
 i(f'lea 0x48(%rsp), %rsi')  # (arg 1: stack frame)
 i(f'call *%rax')

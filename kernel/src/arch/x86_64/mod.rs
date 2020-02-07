@@ -28,6 +28,7 @@ pub mod interrupt;
 pub mod memory;
 #[cfg(not(test))]
 pub mod panic;
+pub mod syscall;
 
 pub fn halt() -> ! {
     loop {

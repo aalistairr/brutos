@@ -23,19 +23,29 @@ bitfield! {
     pub struct CDDescriptor([u32; 2]);
 
     field ty: CDType => 1[8..13];
+    field limit: u16 => 0[0..16];
     pub field dpl: usize => 1[13..15];
     pub field present: bool => 1[15];
     pub field long: bool => 1[21];
+    field db: bool => 1[22];
+    field granularity_4k: bool => 1[23];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum CDType {
-    Code = 0b11001,
+    Code = 0b11011,
     Data = 0b10011,
 }
 
 impl CDDescriptor {
     pub const fn new(ty: CDType) -> CDDescriptor {
-        CDDescriptor([0; 2]).with_ty(ty)
+        CDDescriptor([0; 2])
+            .with_ty(ty)
+            .with_limit(0xffff)
+            .with_granularity_4k(true)
+            .with_db(match ty {
+                CDType::Data => true,
+                CDType::Code => false,
+            })
     }
 }

@@ -1,4 +1,4 @@
-use brutos_util_macros::{bitfield, ConvertInner};
+use brutos_util_macros::{bitfield, BitfieldNew, ConvertInner};
 
 unsafe fn read_address(addr: u32) -> u64 {
     let (lo, hi): (u64, u64);
@@ -63,6 +63,7 @@ msr!(0x1b => Ia32ApicBase: ApicBase = R W);
 msr!(0x277 => Ia32Pat: Pat = R W);
 msr!(0x6e0 => Ia32TscDeadline: u64 = R W);
 msr!(0xc000_0080 => Ia32Efer: Efer = R W);
+msr!(0xc000_0081 => Ia32Star: Star = R W);
 msr!(0xc000_0082 => Ia32LStar: u64 = R W);
 msr!(0xc000_0084 => Ia32FMask: u64 = R W);
 msr!(0xc000_0100 => Ia32FsBase: u64 = R W);
@@ -101,4 +102,12 @@ bitfield! {
     pub field ia32_enabled: bool => 8;
     #[ro] pub field ia32_active: bool => 10;
     pub field nx_enabled: bool => 11;
+}
+
+bitfield! {
+    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
+    pub struct Star(u64);
+
+    pub field kernel_selector: u16 => 32..48;
+    pub field user_selector: u16 => 48..64;
 }
