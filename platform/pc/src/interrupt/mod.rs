@@ -3,6 +3,16 @@ use crate::io::{inb, outb};
 pub mod apic;
 pub mod idt;
 
+#[repr(C)]
+pub struct InterruptStackFrame {
+    pub rip: usize,
+    pub cs: u16,
+    _padding: [u8; 6],
+    pub rflags: usize,
+    pub rsp: usize,
+    pub ss: usize,
+}
+
 pub unsafe fn initialize_pic(vector_offset_0: u8, vector_offset_1: u8) {
     assert!(vector_offset_0 % 32 == 0);
     assert!(vector_offset_1 % 32 == 0);

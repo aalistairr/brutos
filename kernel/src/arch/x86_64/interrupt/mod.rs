@@ -8,6 +8,7 @@ use brutos_platform_pc as pc;
 use brutos_platform_pc::cpuid;
 use brutos_platform_pc::interrupt::apic::{self, Apic};
 use brutos_platform_pc::interrupt::idt::{Descriptor, Idt, Type};
+use brutos_platform_pc::interrupt::InterruptStackFrame;
 use brutos_platform_pc::msr;
 use brutos_sync::spinlock::Spinlock;
 use brutos_task::arch::{tss_mut, GDT_CODE_KERN};
@@ -52,16 +53,6 @@ alias! { kill:
     invalid_tss,
     segment_not_present,
     stack_segment_fault
-}
-
-#[repr(C)]
-pub struct InterruptStackFrame {
-    rip: usize,
-    cs: u16,
-    _padding: [u8; 6],
-    rflags: usize,
-    rsp: usize,
-    ss: usize,
 }
 
 unsafe fn check_task() {
