@@ -60,10 +60,10 @@ pub unsafe fn entry() {
 
         pop %r11
         pop %rcx
-        pop %rax
+        pop %r10
 
         cli
-        mov %rax, %rsp
+        mov %r10, %rsp
     syscall_unswapped_gs_postfix_start:
         swapgs
         sysret
@@ -98,7 +98,7 @@ pub fn perform_syscall(
         asm!("syscall"
             : "={rax}" (r)
             : "{rdi}" (arg1), "{rsi}" (arg2), "{rdx}" (arg3), "{r10}" (arg4), "{r8}" (arg5), "{r9}" (arg6)
-            : "rcx", "r11", "memory"
+            : "memory", "rcx", "r11", "rdi", "rsi", "rdx", "r10", "r8", "r9"
             : "volatile");
         r
     }
