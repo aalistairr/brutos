@@ -2793,19 +2793,32 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
 
         cmpq $$8, 0x50(%rsp)
         jne 1f
-        cmpq $$interrupt_entry_unswapped_gs_prefix_start, 0x48(%rsp)
-        jb 2f
-        cmpq $$interrupt_entry_unswapped_gs_prefix_end, 0x48(%rsp)
-        jb 1f
-        cmpq $$interrupt_entry_unswapped_gs_postfix_start, 0x48(%rsp)
-        jb 2f
-        cmpq $$interrupt_entry_unswapped_gs_postfix_end, 0x48(%rsp)
-        jnb 2f
 
+        mov 0x48(%rsp), %r10
+        cmpq $$syscall_unswapped_gs_prefix_start, %r10
+        jb 1f
+        cmpq $$syscall_unswapped_gs_prefix_end, %r10
+        jb 2f
     1:
+        cmpq $$syscall_unswapped_gs_postfix_start, %r10
+        jb 1f
+        cmpq $$syscall_unswapped_gs_postfix_end, %r10
+        jb 2f
+    1:
+        cmpq $$interrupt_entry_unswapped_gs_prefix_start, %r10
+        jb 1f
+        cmpq $$interrupt_entry_unswapped_gs_prefix_end, %r10
+        jb 2f
+    1:
+        cmpq $$interrupt_entry_unswapped_gs_postfix_start, %r10
+        jb 1f
+        cmpq $$interrupt_entry_unswapped_gs_postfix_end, %r10
+        jae 3f
+
+    2:
         swapgs
         movb $$1, 0x53(%rsp)
-    2:
+    3:
 
         lea 0x48(%rsp), %rsi
         call *%rax

@@ -8,7 +8,7 @@ pub unsafe fn initialize() {
             .with_kernel_selector(brutos_task::arch::GDT_CODE_KERN)
             .with_user_selector(brutos_task::arch::GDT_CODE_USER),
     );
-    msr::write::<msr::Ia32LStar>(entry as u64);
+    msr::write::<msr::Ia32LStar>(syscall_entry as u64);
     msr::write::<msr::Ia32FMask>(!0);
 }
 
@@ -35,7 +35,8 @@ pub unsafe fn initialize() {
 
 #[cfg(target_os = "bare")]
 #[naked]
-pub unsafe fn entry() {
+#[no_mangle]
+pub unsafe fn syscall_entry() {
     // %rcx contains the return RIP
     // %r11 contains the return RFLAGS
     asm!("
