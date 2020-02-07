@@ -1,7 +1,5 @@
-#[cfg(target_os = "bare")]
 use brutos_platform_pc::msr;
 
-#[cfg(target_os = "bare")]
 pub unsafe fn initialize() {
     msr::write::<msr::Ia32Star>(
         msr::Star::new()
@@ -33,9 +31,8 @@ pub unsafe fn initialize() {
 //
 //   %rax       return value    (enforced in ABI)
 
-#[cfg(target_os = "bare")]
-#[naked]
 #[no_mangle]
+#[naked]
 pub unsafe fn syscall_entry() {
     // %rcx contains the return RIP
     // %r11 contains the return RFLAGS
@@ -72,7 +69,6 @@ pub unsafe fn syscall_entry() {
     " :::: "volatile");
 }
 
-#[cfg(target_os = "bare")]
 #[no_mangle]
 pub extern "C" fn handle_syscall(
     arg1: usize,
@@ -85,7 +81,6 @@ pub extern "C" fn handle_syscall(
     unimplemented!()
 }
 
-#[cfg(not(target_os = "bare"))]
 pub fn perform_syscall(
     arg1: usize,
     arg2: usize,

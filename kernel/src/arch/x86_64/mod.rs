@@ -66,6 +66,7 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
         self::interrupt::initialize();
         task::arch::current_task_dec_critical_count();
         pc::msr::map::<pc::msr::Ia32Efer, _>(|x| x.with_nx_enabled(true));
+        syscall::initialize();
     }
 
     let multiboot_info = (multiboot_info_addr.0 + memory::PHYS_IDENT_OFFSET) as *const BootInfo;
