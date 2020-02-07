@@ -71,12 +71,12 @@ pub unsafe fn syscall_entry() {
 
 #[no_mangle]
 pub extern "C" fn handle_syscall(
-    arg1: usize,
-    arg2: usize,
-    arg3: usize,
-    arg4: usize,
-    arg5: usize,
-    arg6: usize,
+    _arg1: usize,
+    _arg2: usize,
+    _arg3: usize,
+    _arg4: usize,
+    _arg5: usize,
+    _arg6: usize,
 ) -> usize {
     unimplemented!()
 }
