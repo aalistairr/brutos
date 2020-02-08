@@ -123,7 +123,7 @@ impl ToTokens for Bitfield {
 
                         pub const SELF_BITS: core::ops::Range<u32> = #self_bits;
                         pub const SELF_BITS_LEN: usize = (SELF_BITS.end - SELF_BITS.start) as usize;
-                        pub const SELF_MASK: SelfRepr = self_repr_create_mask(VALUE_BITS);
+                        pub const SELF_MASK: SelfRepr = self_repr_create_mask(SELF_BITS);
                         pub const VALUE_BITS: core::ops::Range<u32> = #value_bits;
                         pub const VALUE_BITS_LEN: usize = (VALUE_BITS.end - VALUE_BITS.start) as usize;
                         pub const VALUE_MASK: ValueRepr = value_repr_create_mask(VALUE_BITS);
