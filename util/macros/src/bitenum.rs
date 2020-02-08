@@ -1,9 +1,6 @@
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
-use syn::parse::{Parse, ParseStream, Result};
-use syn::{
-    parse_macro_input, Data, DeriveInput, Fields, Ident, Meta, Path, Token, Type, Visibility,
-};
+use syn::{parse_macro_input, Data, DeriveInput, Fields, Meta, Path};
 
 pub fn bitenum(input: TokenStream) -> TokenStream {
     let DeriveInput {
@@ -73,65 +70,6 @@ pub fn bitenum(input: TokenStream) -> TokenStream {
 
             #vis const fn into_repr(self) -> #repr {
                 self as #repr
-            }
-        }
-    };
-    TokenStream::from(expanded)
-}
-
-struct BitEnumField {
-    vis: Visibility,
-    bitfield_ty: Type,
-    field_name: Ident,
-    bitenum_ty: Type,
-}
-
-impl Parse for BitEnumField {
-    fn parse(input: ParseStream) -> Result<BitEnumField> {
-        let vis = input.parse()?;
-        let bitfield_ty = input.parse()?;
-        input.parse::<Token![.]>()?;
-        let field_name = input.parse()?;
-        input.parse::<Token![:]>()?;
-        let bitenum_ty = input.parse()?;
-        Ok(BitEnumField {
-            vis,
-            bitfield_ty,
-            field_name,
-            bitenum_ty,
-        })
-    }
-}
-
-pub fn bitenum_field(input: TokenStream) -> TokenStream {
-    let BitEnumField {
-        vis,
-        bitfield_ty,
-        field_name,
-        bitenum_ty,
-    } = parse_macro_input!(input as BitEnumField);
-    let raw_getter_name = format_ident!("{}_raw", field_name);
-    let raw_setter_name = format_ident!("set_{}_raw", field_name);
-    let getter_name = field_name.clone();
-    let setter_name = format_ident!("set_{}", field_name);
-    let with_name = format_ident!("with_{}", field_name);
-
-    let expanded = quote! {
-        impl #bitfield_ty {
-            #vis const fn #getter_name(&self) -> #bitenum_ty {
-                match #bitenum_ty::from_repr(self.#raw_getter_name()) {
-                    Some(x) => x,
-                    _ => panic!(concat!("invalid repr for `", stringify!(#field_name), "`")),
-                }
-            }
-
-            #vis const fn #setter_name(&mut self, value: #bitenum_ty) {
-                self.#raw_setter_name(value.into_repr());
-            }
-
-            #vis const fn #with_name(mut self, value: #bitenum_ty) -> Self {
-                self.#setter_name(value);
-                self
             }
         }
     };

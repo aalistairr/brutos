@@ -11,11 +11,6 @@ pub fn bitenum(input: TokenStream) -> TokenStream {
 }
 
 #[proc_macro]
-pub fn bitenum_field(input: TokenStream) -> TokenStream {
-    bitenum::bitenum_field(input)
-}
-
-#[proc_macro]
 pub fn bitfield(input: TokenStream) -> TokenStream {
     bitfield::bitfield(input)
 }
