@@ -25,15 +25,15 @@ pub const KERNEL_ADDR_SPACE_RANGE: Range<VirtAddr> =
 pub const USER_ADDR_SPACE_RANGE: Range<VirtAddr> =
     VirtAddr(0x0000000000000000)..VirtAddr(0x0000800000000000);
 
+pub const unsafe fn map_phys_ident_unchecked(addr: PhysAddr) -> NonNull<u8> {
+    NonNull::new_unchecked((addr.0 + PHYS_IDENT_OFFSET) as *mut u8)
+}
+
 pub fn map_phys_ident(addr: PhysAddr, size: usize) -> Result<NonNull<u8>, ()> {
     if addr.0.checked_add(size).ok_or(())? > PHYS_IDENT_SIZE {
         return Err(());
     }
-    return unsafe {
-        Ok(NonNull::new_unchecked(
-            (addr.0 + PHYS_IDENT_OFFSET) as *mut u8,
-        ))
-    };
+    return unsafe { Ok(map_phys_ident_unchecked(addr)) };
 }
 
 pub fn phys_ident_addr(ptr: NonNull<u8>) -> PhysAddr {

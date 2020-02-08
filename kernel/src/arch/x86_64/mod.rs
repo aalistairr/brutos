@@ -45,9 +45,11 @@ pub fn halt() -> ! {
 
 pub fn screen() -> Pin<&'static Mutex<pc::fb::Screen, Cx>> {
     static SCREEN: Mutex<pc::fb::Screen, Cx> = unsafe {
-        Mutex::new(pc::fb::Screen::with_framebuffer({
-            (pc::fb::FRAMEBUFFER_ADDR + memory::PHYS_IDENT_OFFSET) as *mut _
-        }))
+        Mutex::new(pc::fb::Screen::with_framebuffer(
+            crate::arch::memory::map_phys_ident_unchecked(pc::fb::FRAMEBUFFER_ADDR)
+                .cast()
+                .as_ptr(),
+        ))
     };
     unsafe { Pin::new_unchecked(&SCREEN) }
 }

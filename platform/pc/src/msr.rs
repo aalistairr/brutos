@@ -1,3 +1,4 @@
+use brutos_memory_units::PhysAddr;
 use brutos_util_macros::{bitfield, BitfieldNew, ConvertInner};
 
 unsafe fn read_address(addr: u32) -> u64 {
@@ -77,7 +78,7 @@ bitfield! {
     pub field bsp: bool = [8];
     pub field x2apic_enabled: bool = [10];
     pub field enabled: bool = [11];
-    pub field base: usize { [12..48] => [12..48] }
+    pub field base: PhysAddr { [12..48] => [12..48] }
 }
 
 bitfield! {

@@ -2,7 +2,7 @@ use core::cmp::max;
 use core::convert::TryInto;
 use core::pin::Pin;
 
-use brutos_memory_units::{PhysAddr, VirtAddr};
+use brutos_memory_units::VirtAddr;
 use brutos_memory_vm::{FaultConditions, PageFaultError};
 use brutos_platform_pc as pc;
 use brutos_platform_pc::cpuid;
@@ -223,9 +223,8 @@ unsafe fn setup_apic() {
     pc::interrupt::disable_pic();
 
     let apic_addr = msr::read::<msr::Ia32ApicBase>().base();
-    let apic_ptr =
-        crate::arch::memory::map_phys_ident(PhysAddr(apic_addr), core::mem::size_of::<Apic>())
-            .expect("failed to map APIC into memory");
+    let apic_ptr = crate::arch::memory::map_phys_ident(apic_addr, core::mem::size_of::<Apic>())
+        .expect("failed to map APIC into memory");
     APIC = Some(Spinlock::new(apic_ptr.cast().as_mut()));
 
     let mut apic = get_apic().lock();

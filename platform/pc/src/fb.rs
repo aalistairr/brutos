@@ -1,6 +1,7 @@
 use core::cell::UnsafeCell;
 use core::ptr;
 
+use brutos_memory_units::PhysAddr;
 use brutos_util_macros::{bitfield, BitEnum, BitfieldNew};
 
 use crate::io::outb;
@@ -57,7 +58,7 @@ pub const FB_HEIGHT: usize = 25;
 
 type Framebuffer = [[UnsafeCell<Character>; FB_WIDTH]; FB_HEIGHT];
 
-pub const FRAMEBUFFER_ADDR: usize = 0xb8000;
+pub const FRAMEBUFFER_ADDR: PhysAddr = PhysAddr(0xb8000);
 
 pub struct Screen {
     framebuffer: *mut Framebuffer,

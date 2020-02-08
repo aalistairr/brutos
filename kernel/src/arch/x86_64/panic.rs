@@ -14,9 +14,11 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     }
 
     let mut screen = unsafe {
-        pc::fb::Screen::with_framebuffer({
-            (pc::fb::FRAMEBUFFER_ADDR + crate::arch::memory::PHYS_IDENT_OFFSET) as *mut _
-        })
+        pc::fb::Screen::with_framebuffer(
+            crate::arch::memory::map_phys_ident_unchecked(pc::fb::FRAMEBUFFER_ADDR)
+                .cast()
+                .as_ptr(),
+        )
     };
     screen.style = pc::fb::Style::new()
         .with_foreground(pc::fb::Color::White)
