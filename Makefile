@@ -11,6 +11,7 @@ ifeq ($(CFG),release)
 CARGO_FLAGS += --release
 CARGO_FLAGS_RUSTFLAGS += -C lto
 else
+TARGET := $(TARGET)-debug
 RUSTFLAGS += -C force-frame-pointers=yes
 endif
 

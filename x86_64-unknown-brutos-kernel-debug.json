@@ -1,0 +1,29 @@
+{
+  "arch": "x86_64",
+  "cpu": "x86-64",
+  "data-layout": "e-m:e-i64:64-f80:128-n8:16:32:64-S128",
+  "executables": true,
+  "linker": "x86_64-elf-ld",
+  "linker-flavor": "ld",
+  "linker-is-gnu": true,
+  "llvm-target": "x86_64-unknown-none",
+  "max-atomic-width": 64,
+  "os": "bare",
+  "pre-link-args": {
+    "gcc": [
+      "-Wl,--as-needed",
+      "-m64"
+    ]
+  },
+  "stack-probes": true,
+  "target-c-int-width": "32",
+  "target-endian": "little",
+  "target-pointer-width": "64",
+  "vendor": "unknown",
+  "disable-redzone": true,
+  "panic-strategy": "abort",
+  "features": "-mmx,-sse,+soft-float",
+  "relocation-model": "static",
+  "code-model": "kernel"
+}
+
