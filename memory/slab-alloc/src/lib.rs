@@ -1,6 +1,7 @@
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 #![feature(const_fn, const_if_match, const_loop, const_panic)]
 #![feature(const_alloc_layout)]
+#![cfg_attr(test, feature(test))]
 
 use core::marker::PhantomData;
 use core::mem;

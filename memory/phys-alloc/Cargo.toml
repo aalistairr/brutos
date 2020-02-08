@@ -11,5 +11,8 @@ brutos-memory-units = { path = "../units" }
 brutos-util = { path = "../../util" }
 brutos-util-macros = { path = "../../util/macros" }
 
+[dev-dependencies]
+rand = "0.7.3"
+
 [features]
 std = ["brutos-memory-units/std", "brutos-util/std"]

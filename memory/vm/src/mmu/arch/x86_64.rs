@@ -607,7 +607,7 @@ mod tests {
                 Box::leak(Box::new(Table([EMPTY_ENTRY_CELL; 512]))),
             );
             let addr = self.addr;
-            self.addr = self.addr + crate::arch::PAGE_SIZE;
+            self.addr = self.addr + brutos_memory_units::arch::PAGE_SIZE;
             Ok(addr)
         }
 

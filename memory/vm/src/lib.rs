@@ -3,6 +3,7 @@
 #![feature(const_generics)]
 #![feature(const_fn, const_if_match, const_panic, const_mut_refs)]
 #![feature(asm)]
+#![cfg_attr(test, feature(test))]
 
 use core::ops::Range;
 use core::pin::Pin;

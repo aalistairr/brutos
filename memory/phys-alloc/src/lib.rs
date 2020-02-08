@@ -1,5 +1,7 @@
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 #![feature(const_fn)]
+#![cfg_attr(test, allow(incomplete_features))]
+#![cfg_attr(test, feature(const_generics, never_type, vec_into_raw_parts))]
 
 use core::cell::Cell;
 use core::ops::Range;
