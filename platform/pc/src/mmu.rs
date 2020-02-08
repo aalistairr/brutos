@@ -22,7 +22,7 @@ bitfield! {
     pub field global: bool = [8];
     pub field cache_disabled: bool = [4];
     pub field writethrough: bool = [3];
-    pub field address: PhysAddr { [12..48] => [12..48] };
+    pub field address: PhysAddr { [12..48] => [12..48] }
     pub field population: usize = [52..52 + 10];
 }
 

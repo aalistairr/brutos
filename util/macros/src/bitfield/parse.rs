@@ -11,7 +11,7 @@ pub mod kw {
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub struct Bitfield {
     pub strukt: ItemStruct,
-    pub fields: Punctuated<Field, Token![;]>,
+    pub fields: Vec<Field>,
 }
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -30,6 +30,7 @@ pub enum Composition {
     Concatenation {
         eq_token: Token![=],
         bits: Punctuated<Bits, Token![~]>,
+        semi_token: Token![;],
     },
     Mapping {
         brace_token: token::Brace,
@@ -65,7 +66,13 @@ impl Parse for Bitfield {
     fn parse(input: ParseStream) -> Result<Bitfield> {
         Ok(Bitfield {
             strukt: input.parse()?,
-            fields: input.parse_terminated(Field::parse)?,
+            fields: {
+                let mut fields = Vec::new();
+                while !input.is_empty() {
+                    fields.push(input.parse()?);
+                }
+                fields
+            },
         })
     }
 }
@@ -90,6 +97,7 @@ impl Parse for Composition {
             Ok(Composition::Concatenation {
                 eq_token: input.parse()?,
                 bits: Punctuated::parse_separated_nonempty(input)?,
+                semi_token: input.parse()?,
             })
         } else {
             let content;
