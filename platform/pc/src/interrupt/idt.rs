@@ -7,12 +7,12 @@ bitfield! {
     #[repr(transparent)]
     pub struct Descriptor([u32; 4]);
 
-    pub field offset: usize => 0[0..16] ~ 1[16..32] ~ 2[0..32];
-    pub field segment: u16 => 0[16..32];
-    pub field ist: usize => 1[0..3];
-    pub field ty: Type => 1[8..12];
-    pub field dpl: usize => 1[13..15];
-    pub field present: bool => 1[15];
+    pub field offset: usize = 0[0..16] ~ 1[16..32] ~ 2[0..32];
+    pub field segment: u16 = 0[16..32];
+    pub field ist: usize = 1[0..3];
+    pub field ty: Type = 1[8..12];
+    pub field dpl: usize = 1[13..15];
+    pub field present: bool = 1[15];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]

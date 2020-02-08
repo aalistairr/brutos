@@ -6,11 +6,11 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct Descriptor([u32; 4]);
 
-    field base_address: usize => 0[16..32] ~ 1[0..8] ~ 1[24..32] ~ 2[0..32];
-    field segment_limit: usize => 0[0..16] ~ 1[16..20];
-    field ty: Type => 1[8..12];
-    pub field dpl: usize => 1[13..15];
-    pub field present: bool => 1[15];
+    field base_address: usize = 0[16..32] ~ 1[0..8] ~ 1[24..32] ~ 2[0..32];
+    field segment_limit: usize = 0[0..16] ~ 1[16..20];
+    field ty: Type = 1[8..12];
+    pub field dpl: usize = 1[13..15];
+    pub field present: bool = 1[15];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]

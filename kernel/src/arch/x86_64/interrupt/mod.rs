@@ -119,10 +119,10 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct PageFaultErrorCode(usize);
 
-    pub field present: bool => 0;
-    pub field write: bool => 1;
-    pub field user_mode: bool => 2;
-    pub field instruction_fetch: bool => 4;
+    pub field present: bool = [0];
+    pub field write: bool = [1];
+    pub field user_mode: bool = [2];
+    pub field instruction_fetch: bool = [4];
 }
 
 interrupt_handler!(int_handler_page_fault => page_fault);

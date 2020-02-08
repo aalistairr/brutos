@@ -14,16 +14,16 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Default, BitfieldNew)]
     pub struct Entry(usize);
 
-    pub field present: bool => 0;
-    pub field ps: bool => 7;
-    pub field user_accessible: bool => 2;
-    pub field writable: bool => 1;
-    pub field not_executable: bool => 63;
-    pub field global: bool => 8;
-    pub field cache_disabled: bool => 4;
-    pub field writethrough: bool => 3;
-    pub field address: PhysAddr { 12..48 => 12..48 }
-    pub field population: usize => 52..52 + 10;
+    pub field present: bool = [0];
+    pub field ps: bool = [7];
+    pub field user_accessible: bool = [2];
+    pub field writable: bool = [1];
+    pub field not_executable: bool = [63];
+    pub field global: bool = [8];
+    pub field cache_disabled: bool = [4];
+    pub field writethrough: bool = [3];
+    pub field address: PhysAddr { [12..48] => [12..48] };
+    pub field population: usize = [52..52 + 10];
 }
 
 impl Entry {

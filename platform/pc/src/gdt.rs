@@ -22,13 +22,13 @@ bitfield! {
     #[repr(transparent)]
     pub struct CDDescriptor([u32; 2]);
 
-    field ty: CDType => 1[8..13];
-    field limit: u16 => 0[0..16];
-    pub field dpl: usize => 1[13..15];
-    pub field present: bool => 1[15];
-    pub field long: bool => 1[21];
-    field db: bool => 1[22];
-    field granularity_4k: bool => 1[23];
+    field ty: CDType = 1[8..13];
+    field limit: u16 = 0[0..16];
+    pub field dpl: usize = 1[13..15];
+    pub field present: bool = 1[15];
+    pub field long: bool = 1[21];
+    field db: bool = 1[22];
+    field granularity_4k: bool = 1[23];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]

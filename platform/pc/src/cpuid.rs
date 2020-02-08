@@ -35,9 +35,9 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct CoreCrystalClock([u32; 4]);
 
-    #[ro] field tsc_ratio_den: usize => 0[0..32];
-    #[ro] field tsc_ratio_num: usize => 1[0..32];
-    #[ro] field ccc_freq_raw: usize => 2[0..32];
+    #[ro] field tsc_ratio_den: usize = 0[0..32];
+    #[ro] field tsc_ratio_num: usize = 1[0..32];
+    #[ro] field ccc_freq_raw: usize = 2[0..32];
 }
 
 impl CoreCrystalClock {
@@ -60,5 +60,5 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct InvariantTsc([u32; 4]);
 
-    #[ro] pub field available: bool => 3[8];
+    #[ro] pub field available: bool = 3[8];
 }

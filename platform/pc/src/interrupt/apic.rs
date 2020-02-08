@@ -201,10 +201,10 @@ bitfield! {
     #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
     pub struct Timer(u32);
 
-    pub field vector: u8 => 0..8;
-    #[ro] pub field delivery_status: DeliveryStatus => 12;
-    pub field masked: bool => 16;
-    pub field timer_mode: TimerMode => 17..19;
+    pub field vector: u8 = [0..8];
+    #[ro] pub field delivery_status: DeliveryStatus = [12];
+    pub field masked: bool = [16];
+    pub field timer_mode: TimerMode = [17..19];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -218,13 +218,13 @@ bitfield! {
     #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
     pub struct LInt(u32);
 
-    pub field vector: u8 => 0..8;
-    pub field delivery_mode: DeliveryMode => 8..11;
-    #[ro] pub field delivery_status: DeliveryStatus => 12;
-    pub field interrupt_input_pin_polarity: PinPolarity => 13;
-    pub field remote_irr: bool => 14;
-    pub field trigger_mode: TriggerMode => 15;
-    pub field masked: bool => 16;
+    pub field vector: u8 = [0..8];
+    pub field delivery_mode: DeliveryMode = [8..11];
+    #[ro] pub field delivery_status: DeliveryStatus = [12];
+    pub field interrupt_input_pin_polarity: PinPolarity = [13];
+    pub field remote_irr: bool = [14];
+    pub field trigger_mode: TriggerMode = [15];
+    pub field masked: bool = [16];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -237,40 +237,40 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct LvtRegister(u32);
 
-    pub field vector: u8 => 0..8;
-    pub field delivery_mode: DeliveryMode => 8..11;
-    #[ro] pub field delivery_status: DeliveryStatus => 12;
-    pub field masked: bool => 16;
+    pub field vector: u8 = [0..8];
+    pub field delivery_mode: DeliveryMode = [8..11];
+    #[ro] pub field delivery_status: DeliveryStatus = [12];
+    pub field masked: bool = [16];
 }
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct ErrorRegister(u32);
 
-    pub field vector: u8 => 0..8;
-    #[ro] pub field delivery_status: DeliveryStatus => 12;
-    pub field masked: bool => 16;
+    pub field vector: u8 = [0..8];
+    #[ro] pub field delivery_status: DeliveryStatus = [12];
+    pub field masked: bool = [16];
 }
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct ErrorStatus(u32);
 
-    #[ro] pub field send_checksum: bool => 0;
-    #[ro] pub field recv_checksum: bool => 1;
-    #[ro] pub field send_accept: bool => 2;
-    #[ro] pub field recv_accept: bool => 3;
-    #[ro] pub field redirectable_ipi: bool => 4;
-    #[ro] pub field send_illegal_vector: bool => 5;
-    #[ro] pub field received_illegal_vector: bool => 6;
-    #[ro] pub field illegal_register_address: bool => 7;
+    #[ro] pub field send_checksum: bool = [0];
+    #[ro] pub field recv_checksum: bool = [1];
+    #[ro] pub field send_accept: bool = [2];
+    #[ro] pub field recv_accept: bool = [3];
+    #[ro] pub field redirectable_ipi: bool = [4];
+    #[ro] pub field send_illegal_vector: bool = [5];
+    #[ro] pub field received_illegal_vector: bool = [6];
+    #[ro] pub field illegal_register_address: bool = [7];
 }
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct DivideConfiguration(u32);
 
-    pub field divide_value: DivideValue => 0..2 ~ 3;
+    pub field divide_value: DivideValue = [0..2] ~ [3];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -289,14 +289,14 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, BitfieldNew)]
     pub struct InterruptCommand([u32; 2]);
 
-    pub field vector: u8 => 0[0..8];
-    pub field delivery_mode: DeliveryMode => 0[8..11];
-    pub field destination_mode: DestinationMode => 0[11];
-    #[ro] pub field delivery_status: DeliveryStatus => 0[12];
-    pub field level_assert: bool => 0[14];
-    pub field trigger_mode: TriggerMode => 0[15];
-    pub field destination_shorthand: DestinationShorthand => 0[18..20];
-    pub field destination: u8 => 1[24..32];
+    pub field vector: u8 = 0[0..8];
+    pub field delivery_mode: DeliveryMode = 0[8..11];
+    pub field destination_mode: DestinationMode = 0[11];
+    #[ro] pub field delivery_status: DeliveryStatus = 0[12];
+    pub field level_assert: bool = 0[14];
+    pub field trigger_mode: TriggerMode = 0[15];
+    pub field destination_shorthand: DestinationShorthand = 0[18..20];
+    pub field destination: u8 = 1[24..32];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -317,14 +317,14 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct LogicalDestination(u32);
 
-    pub field logical_apic_id: u8 => 24..32;
+    pub field logical_apic_id: u8 = [24..32];
 }
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct DestinationFormat(u32);
 
-    pub field model: Model => 28..32;
+    pub field model: Model = [28..32];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
@@ -337,8 +337,8 @@ bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
     pub struct SpuriousInterruptVector(u32);
 
-    pub field vector: u8 => 0..8;
-    pub field apic_enabled: bool => 8;
-    pub field focus_processor_checking_enabled: bool => 9;
-    pub field eoi_broadcast_suppression_enabled: bool => 12;
+    pub field vector: u8 = [0..8];
+    pub field apic_enabled: bool = [8];
+    pub field focus_processor_checking_enabled: bool = [9];
+    pub field eoi_broadcast_suppression_enabled: bool = [12];
 }

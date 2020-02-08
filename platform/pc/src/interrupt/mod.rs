@@ -60,9 +60,9 @@ pub mod pit {
     bitfield! {
         #[derive(Copy, Clone, PartialEq, Eq, Debug)]
         pub struct Command(u8);
-        pub field operating_mode: usize => 1..4;
-        pub field access_mode: usize => 4..6;
-        pub field channel: usize => 6..8;
+        pub field operating_mode: usize = [1..4];
+        pub field access_mode: usize = [4..6];
+        pub field channel: usize = [6..8];
     }
     impl Command {
         pub fn new() -> Command {

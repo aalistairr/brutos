@@ -16,8 +16,8 @@ bitfield! {
     #[repr(transparent)]
     pub struct Style(u8);
 
-    pub field foreground: Color => 0..4;
-    pub field background: Color => 4..8;
+    pub field foreground: Color = [0..4];
+    pub field background: Color = [4..8];
 }
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
