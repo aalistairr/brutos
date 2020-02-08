@@ -10,6 +10,7 @@ edition = "2018"
 brutos-alloc = { path = "../../alloc" }
 brutos-memory-traits = { path = "../traits" }
 brutos-memory-units = { path = "../units" }
+brutos-platform-pc = { path = "../../platform/pc" }
 brutos-sync = { path = "../../sync" }
 brutos-util = { path = "../../util" }
 brutos-util-macros = { path = "../../util/macros" }

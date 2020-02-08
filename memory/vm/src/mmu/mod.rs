@@ -1,7 +1,10 @@
+pub use brutos_memory_units::MmuFlags as Flags;
+
 use crate::{PhysAddr, VirtAddr};
-use brutos_alloc::OutOfMemory;
 
 pub mod arch;
+
+pub use self::arch::{MapError, UnmapError};
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum PageSize {
@@ -14,35 +17,6 @@ impl Default for PageSize {
     fn default() -> PageSize {
         PageSize::Normal
     }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum MapError {
-    NotAllocated,
-    OutOfMemory,
-    Obstructed,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum UnmapError {
-    NotAllocated,
-    Obstructed,
-}
-
-impl From<OutOfMemory> for MapError {
-    fn from(OutOfMemory: OutOfMemory) -> MapError {
-        MapError::OutOfMemory
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
-pub struct Flags {
-    pub user_accessible: bool,
-    pub writable: bool,
-    pub executable: bool,
-    pub global: bool,
-    pub cache_disabled: bool,
-    pub writethrough: bool,
 }
 
 pub struct Tables {

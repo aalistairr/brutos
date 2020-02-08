@@ -178,3 +178,13 @@ impl Order {
         crate::arch::PAGE_SIZE << self.0
     }
 }
+
+#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
+pub struct MmuFlags {
+    pub user_accessible: bool,
+    pub writable: bool,
+    pub executable: bool,
+    pub global: bool,
+    pub cache_disabled: bool,
+    pub writethrough: bool,
+}
