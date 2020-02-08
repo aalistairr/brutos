@@ -207,7 +207,7 @@ pub unsafe fn initialize_with_address_space() {
         .alloc_stack()
         .expect("failed to allocate NMI stack")
         .0 as u64;
-    tss_mut().as_mut().ist1 = nmi_stack;
+    tss_mut().as_mut().set_ist1(nmi_stack);
 }
 
 pub unsafe fn unmask() {

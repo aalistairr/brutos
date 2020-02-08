@@ -135,7 +135,7 @@ fn into_output_field(bitfield: &ItemStruct, field: parse::Field) -> Result<outpu
             ..
         } = index
         {
-            *x = Some(parse_quote! { (core::mem::size_of::<#ty>() * 8) });
+            *x = Some(parse_quote! { ((core::mem::size_of::<#ty>() * 8) as u32) });
         }
     }
 
