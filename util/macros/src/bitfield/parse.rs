@@ -124,9 +124,7 @@ impl Parse for Bits {
                 bracket_token: x.bracket_token,
                 index: Index::from_expr(x.elems.pop().unwrap().into_value())?,
             }),
-            Expr::Array(x) if x.elems.len() != 0 => {
-                Err(Error::new_spanned(x, "expected an array with one element"))
-            }
+            Expr::Array(x) => Err(Error::new_spanned(x, "expected an array with one element")),
             expr => Ok(Bits {
                 src: Some(expr),
                 bracket_token: token::Bracket {
