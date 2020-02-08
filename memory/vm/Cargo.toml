@@ -1,0 +1,18 @@
+[package]
+name = "brutos-memory-vm"
+version = "0.1.0"
+authors = ["Alistair Geesing <alistair.geesing@icloud.com>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+brutos-alloc = { path = "../../alloc" }
+brutos-memory-traits = { path = "../traits" }
+brutos-memory-units = { path = "../units" }
+brutos-sync = { path = "../../sync" }
+brutos-util = { path = "../../util" }
+brutos-util-macros = { path = "../../util/macros" }
+
+[features]
+std = ["brutos-alloc/std", "brutos-memory-traits/std", "brutos-memory-units/std", "brutos-sync/std", "brutos-util/std"]

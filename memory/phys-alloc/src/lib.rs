@@ -1,9 +1,12 @@
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![feature(const_fn)]
+
 use core::cell::Cell;
 use core::ops::Range;
 use core::pin::Pin;
 
-use crate::arch::PAGE_SIZE;
-use crate::{Order, PhysAddr};
+use brutos_memory_units::arch::PAGE_SIZE;
+use brutos_memory_units::{Order, PhysAddr};
 use brutos_util::linked_list::{self, LinkedList};
 
 pub mod bootstrap;

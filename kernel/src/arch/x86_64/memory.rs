@@ -4,9 +4,10 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 
 use brutos_alloc::{Arc, OutOfMemory};
-use brutos_memory::phys_alloc::bootstrap;
-use brutos_memory::vm::{self, mmu};
-use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
+use brutos_memory_phys_alloc::bootstrap;
+use brutos_memory_traits::AllocPhysPage;
+use brutos_memory_units::{Order, PhysAddr, VirtAddr};
+use brutos_memory_vm::{self as vm, mmu};
 
 use crate::memory::{CutRange, FailedToBootstrap};
 use crate::{AddressSpace, Cx};
@@ -121,7 +122,7 @@ pub fn initialize() {
     }
 }
 
-impl brutos_memory::vm::Context for Cx {
+impl vm::Context for Cx {
     fn shared_empty_page(&mut self, order: Order) -> Option<(PhysAddr, &Self::PageData)> {
         if order <= Order(9) {
             let (addr, data) = unsafe { &*SHARED_ORDER9_EMPTY_PAGE.as_ptr() };

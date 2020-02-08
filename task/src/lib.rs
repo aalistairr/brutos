@@ -8,7 +8,7 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
-use brutos_memory::VirtAddr;
+use brutos_memory_units::VirtAddr;
 use brutos_sync::spinlock::Spinlock;
 use brutos_util::linked_list::Node;
 use brutos_util::NonSend;

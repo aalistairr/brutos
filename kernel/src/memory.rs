@@ -1,20 +1,21 @@
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_memory::phys_alloc::bootstrap;
-use brutos_memory::phys_alloc::Allocator as PhysAllocator;
-use brutos_memory::PhysAddr;
+use brutos_memory_phys_alloc as phys_alloc;
+use brutos_memory_phys_alloc::Allocator as PhysAllocator;
+use brutos_memory_units::PhysAddr;
+use brutos_memory_vm as vm;
 use brutos_sync::mutex::PinMutex;
 
 use crate::Cx;
 
 #[derive(Default)]
 pub struct PageData {
-    ref_count: brutos_memory::vm::PageRefCount,
+    ref_count: vm::PageRefCount,
 }
 
-impl AsRef<brutos_memory::vm::PageRefCount> for PageData {
-    fn as_ref(&self) -> &brutos_memory::vm::PageRefCount {
+impl AsRef<vm::PageRefCount> for PageData {
+    fn as_ref(&self) -> &vm::PageRefCount {
         &self.ref_count
     }
 }
@@ -25,7 +26,7 @@ pub fn phys_allocator() -> Pin<&'static PinMutex<PhysAllocator<'static, PageData
     unsafe { Pin::new_unchecked(&PHYS_ALLOCATOR) }
 }
 
-static mut REGIONS: &'static [brutos_memory::phys_alloc::Region<'static, PageData>] = &[];
+static mut REGIONS: &'static [phys_alloc::Region<'static, PageData>] = &[];
 
 pub fn initialize() {
     phys_allocator().initialize();
@@ -37,7 +38,7 @@ pub struct FailedToBootstrap;
 
 pub unsafe fn bootstrap(
     mmap: impl Clone + Iterator<Item = Range<PhysAddr>>,
-) -> Result<usize, bootstrap::Error<FailedToBootstrap>> {
+) -> Result<usize, phys_alloc::bootstrap::Error<FailedToBootstrap>> {
     let (free_space, regions) = phys_allocator()
         .as_ref()
         .lock()
@@ -47,11 +48,9 @@ pub unsafe fn bootstrap(
     Ok(free_space)
 }
 
-pub fn get_data(
-    addr: PhysAddr,
-) -> Result<&'static PageData, brutos_memory::phys_alloc::NotAllocated> {
+pub fn get_data(addr: PhysAddr) -> Result<&'static PageData, phys_alloc::NotAllocated> {
     let regions = unsafe { REGIONS };
-    brutos_memory::phys_alloc::get_data(regions, addr)
+    phys_alloc::get_data(regions, addr)
 }
 
 #[derive(Clone)]

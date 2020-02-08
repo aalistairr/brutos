@@ -1,7 +1,9 @@
 use core::pin::Pin;
 
 use brutos_alloc::OutOfMemory;
-use brutos_memory::{AllocPhysPage, Order, PhysAddr, VirtAddr};
+use brutos_memory_traits::AllocPhysPage;
+use brutos_memory_units::{Order, PhysAddr, VirtAddr};
+use brutos_memory_vm as vm;
 use brutos_multiboot2::ffi::BootInfo;
 use brutos_multiboot2::{MmapEntryTy, Tag};
 use brutos_platform_pc as pc;
@@ -101,7 +103,7 @@ pub fn print(args: core::fmt::Arguments) {
     core::fmt::Write::write_fmt(&mut *screen().lock(), args).expect("failed to write");
 }
 
-unsafe impl brutos_memory::vm::mmu::arch::Context for Cx {
+unsafe impl vm::mmu::arch::Context for Cx {
     fn alloc_table(&mut self) -> Result<PhysAddr, OutOfMemory> {
         <Cx as AllocPhysPage>::alloc(Order(0))
             .map(|(addr, _)| addr)
@@ -112,7 +114,7 @@ unsafe impl brutos_memory::vm::mmu::arch::Context for Cx {
         <Cx as AllocPhysPage>::dealloc(addr, Order(0));
     }
 
-    fn map_table(&mut self, addr: PhysAddr) -> *mut brutos_memory::vm::mmu::arch::Table {
+    fn map_table(&mut self, addr: PhysAddr) -> *mut vm::mmu::arch::Table {
         self::memory::map_phys_ident(addr, Order(0).size())
             .expect("Failed to map page translation table into memory")
             .as_ptr() as *mut _

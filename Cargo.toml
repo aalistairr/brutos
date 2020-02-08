@@ -2,7 +2,10 @@
 members = [
     "alloc",
     "kernel",
-    "memory",
+    "memory/phys-alloc",
+    "memory/slab-alloc",
+    "memory/units",
+    "memory/vm",
     "multiboot2",
     "platform/pc",
     "sync",

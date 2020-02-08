@@ -9,5 +9,5 @@ default = []
 std = []
 
 [dependencies]
-brutos-memory = { path = "../memory" }
+brutos-memory-units = { path = "../memory/units" }
 brutos-util = { path = "../util" }

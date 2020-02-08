@@ -2,10 +2,9 @@ use core::ops::Range;
 use core::pin::Pin;
 
 use brutos_alloc::{AllocOne, Arc, ArcInner};
+use brutos_memory_units::arch::PAGE_SIZE;
+use brutos_memory_units::VirtAddr;
 use brutos_util::linked_list::{LinkedList, Node, Transient, TransientMut};
-
-use crate::arch::PAGE_SIZE;
-use crate::VirtAddr;
 
 pub trait Context<T>: Default + AllocOne<ArcInner<Mapping<T, Self>>> {}
 

@@ -1,3 +1,9 @@
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![allow(incomplete_features)]
+#![feature(const_generics)]
+#![feature(const_fn, const_if_match, const_panic, const_mut_refs)]
+#![feature(asm)]
+
 use core::ops::Range;
 use core::pin::Pin;
 use core::sync::atomic::{AtomicUsize, Ordering};
@@ -8,8 +14,8 @@ use brutos_sync::mutex::{Mutex, PinMutex};
 use brutos_sync::waitq;
 use brutos_util::{Guard, UInt};
 
-use crate::{AllocPhysPage, MapPhysPage};
-use crate::{Order, PhysAddr, VirtAddr};
+use brutos_memory_traits::{AllocPhysPage, MapPhysPage};
+use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 
 pub mod mappings;
 pub mod mmu;

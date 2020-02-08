@@ -5,7 +5,7 @@ use core::ops::Range;
 use core::slice;
 use core::str;
 
-use brutos_memory::PhysAddr;
+use brutos_memory_units::PhysAddr;
 
 pub mod ffi;
 

@@ -1,7 +1,11 @@
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+
 use core::fmt;
 use core::ops::{Add, Sub};
 
 use brutos_util::{ConvertRepr, UInt};
+
+pub mod arch;
 
 #[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[repr(transparent)]

@@ -2,7 +2,7 @@ use core::pin::Pin;
 use core::sync::atomic::{fence, AtomicBool, Ordering};
 
 use brutos_alloc::Arc;
-use brutos_memory::VirtAddr;
+use brutos_memory_units::VirtAddr;
 use brutos_platform_pc::{
     gdt,
     tss::{self, Tss},

@@ -3,8 +3,8 @@ use core::mem::{align_of, size_of};
 use core::ops::Range;
 use core::pin::Pin;
 
-use crate::arch::PAGE_SIZE;
-use crate::PhysAddr;
+use brutos_memory_units::arch::PAGE_SIZE;
+use brutos_memory_units::PhysAddr;
 
 use brutos_util::iter::unfold;
 use brutos_util::uint::UInt;

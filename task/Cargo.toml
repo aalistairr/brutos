@@ -11,7 +11,7 @@ user-mode = []
 
 [dependencies]
 brutos-alloc = { path = "../alloc" }
-brutos-memory = { path = "../memory" }
+brutos-memory-units = { path = "../memory/units" }
 brutos-platform-pc = { path = "../platform/pc" }
 brutos-sync = { path = "../sync" }
 brutos-util = { path = "../util" }

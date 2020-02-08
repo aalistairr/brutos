@@ -17,10 +17,11 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory, PinWeak};
-use brutos_memory::arch::PAGE_SIZE;
-use brutos_memory::slab_alloc as slab;
-use brutos_memory::vm;
-use brutos_memory::{AllocMappedPage, AllocPhysPage, Order, PhysAddr, VirtAddr};
+use brutos_memory_slab_alloc as slab;
+use brutos_memory_traits::{AllocMappedPage, AllocPhysPage, MapPhysPage};
+use brutos_memory_units::arch::PAGE_SIZE;
+use brutos_memory_units::{Order, PhysAddr, VirtAddr};
+use brutos_memory_vm as vm;
 use brutos_sync::mpsc;
 use brutos_sync::mutex::{Mutex, PinMutex};
 use brutos_sync::spinlock::{Spinlock, SpinlockGuard};
@@ -126,7 +127,7 @@ pub unsafe fn yieldd() {
 }
 
 unsafe impl AllocPhysPage for Cx {
-    const MAX_ORDER: Order = Order(brutos_memory::phys_alloc::MAX_ORDER);
+    const MAX_ORDER: Order = Order(brutos_memory_phys_alloc::MAX_ORDER);
 
     type PageData = memory::PageData;
 
@@ -153,7 +154,7 @@ unsafe impl AllocPhysPage for Cx {
 }
 
 unsafe impl AllocMappedPage for Cx {
-    const MAX_ORDER: Order = Order(brutos_memory::phys_alloc::MAX_ORDER);
+    const MAX_ORDER: Order = Order(brutos_memory_phys_alloc::MAX_ORDER);
 
     fn alloc(order: Order) -> Result<NonNull<u8>, ()> {
         self::memory::phys_allocator()
@@ -198,11 +199,7 @@ fn initialize_task_allocator() {
     task_allocator().initialize();
     task_allocator().lock().as_mut().initialize();
 }
-slab_allocator!(
-    mapping_allocator,
-    1,
-    ArcInner<brutos_memory::vm::Mapping<Cx>>
-);
+slab_allocator!(mapping_allocator, 1, ArcInner<vm::Mapping<Cx>>);
 fn initialize_mapping_allocator() {
     mapping_allocator().initialize();
     mapping_allocator().lock().as_mut().initialize();
@@ -215,7 +212,7 @@ fn initialize_addr_space_allocator() {
 
 pub struct AddressSpace {
     is_alive: AtomicBool,
-    vm: brutos_memory::vm::Space<Cx>,
+    vm: vm::Space<Cx>,
 }
 
 static mut KERNEL_ADDR_SPACE: core::mem::MaybeUninit<Pin<Arc<AddressSpace, Cx>>> =
@@ -225,7 +222,7 @@ unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
     let addr_space = KERNEL_ADDR_SPACE.write(
         Arc::pin(AddressSpace {
             is_alive: AtomicBool::new(true),
-            vm: brutos_memory::vm::Space::new(
+            vm: vm::Space::new(
                 crate::arch::memory::KERNEL_ADDR_SPACE_RANGE,
                 crate::arch::memory::create_kernel_mmu_tables()?,
             ),
@@ -245,7 +242,7 @@ impl AddressSpace {
         &*KERNEL_ADDR_SPACE.as_ptr()
     }
 
-    pub fn vm<'a>(self: &'a Pin<Arc<AddressSpace, Cx>>) -> Pin<&'a brutos_memory::vm::Space<Cx>> {
+    pub fn vm<'a>(self: &'a Pin<Arc<AddressSpace, Cx>>) -> Pin<&'a vm::Space<Cx>> {
         unsafe { self.as_ref().map_unchecked(|x| &x.vm) }
     }
 
@@ -434,7 +431,7 @@ fn destroy_task(task: Pin<Arc<Task<Cx>, Cx>>) {
     }
 }
 
-unsafe impl brutos_memory::MapPhysPage for Cx {
+unsafe impl MapPhysPage for Cx {
     type Err = ();
 
     unsafe fn with_mapped_page<F, R>(addr: PhysAddr, order: Order, f: F) -> Result<R, Self::Err>

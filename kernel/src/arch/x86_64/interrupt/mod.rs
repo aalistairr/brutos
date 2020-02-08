@@ -2,8 +2,8 @@ use core::cmp::max;
 use core::convert::TryInto;
 use core::pin::Pin;
 
-use brutos_memory::vm::{FaultConditions, PageFaultError};
-use brutos_memory::{PhysAddr, VirtAddr};
+use brutos_memory_units::{PhysAddr, VirtAddr};
+use brutos_memory_vm::{FaultConditions, PageFaultError};
 use brutos_platform_pc as pc;
 use brutos_platform_pc::cpuid;
 use brutos_platform_pc::interrupt::apic::{self, Apic};

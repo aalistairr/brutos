@@ -1,27 +1,8 @@
-#![feature(
-    const_fn,
-    const_if_match,
-    const_panic,
-    const_alloc_layout,
-    const_loop,
-    const_mut_refs
-)]
-#![feature(const_generics)]
-#![feature(asm)]
-#![feature(generic_associated_types)]
-#![cfg_attr(test, feature(test, never_type, vec_into_raw_parts))]
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
-#![allow(incomplete_features)]
 
 use core::ptr::NonNull;
 
-pub mod arch;
-pub mod phys_alloc;
-pub mod slab_alloc;
-pub mod unit;
-pub mod vm;
-
-pub use self::unit::{Order, PhysAddr, VirtAddr};
+pub use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 
 pub unsafe trait AllocMappedPage {
     const MAX_ORDER: Order;

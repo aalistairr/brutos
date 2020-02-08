@@ -1,3 +1,7 @@
+#![cfg_attr(not(any(test, feature = "std")), no_std)]
+#![feature(const_fn, const_if_match, const_loop, const_panic)]
+#![feature(const_alloc_layout)]
+
 use core::marker::PhantomData;
 use core::mem;
 use core::pin::Pin;
@@ -9,7 +13,8 @@ use brutos_util::UInt;
 use brutos_util::Void;
 
 // use crate::arch::PAGE_SIZE;
-use crate::{AllocMappedPage, Order};
+use brutos_memory_traits::AllocMappedPage;
+use brutos_memory_units::Order;
 
 type Mask = u128;
 const MASK_LEN: usize = 2;
