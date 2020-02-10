@@ -35,10 +35,6 @@ impl<F: FnOnce()> Guard<F> {
     }
 }
 
-pub trait ConvertRepr {
-    type Repr;
-}
-
 pub struct NonSend<T>(T);
 
 impl<T> NonSend<T> {

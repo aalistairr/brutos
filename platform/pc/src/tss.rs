@@ -1,10 +1,12 @@
 use core::ptr::NonNull;
 
-use brutos_util_macros::{bitfield, BitEnum};
+use bitbash::{bitfield, BitEnum};
 
 bitfield! {
     #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct Descriptor([u32; 4]);
+
+    pub new(ty);
 
     field base_address: usize = 0[16..32] ~ 1[0..8] ~ 1[24..32] ~ 2[0..32];
     field segment_limit: usize = 0[0..16] ~ 1[16..20];
@@ -20,10 +22,6 @@ pub enum Type {
 }
 
 impl Descriptor {
-    pub const fn new(ty: Type) -> Descriptor {
-        Descriptor([0; 4]).with_ty(ty)
-    }
-
     pub const fn tss_size(&self) -> usize {
         self.segment_limit() + 1
     }

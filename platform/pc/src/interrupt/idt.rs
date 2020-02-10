@@ -1,11 +1,13 @@
 use core::pin::Pin;
 
-use brutos_util_macros::{bitfield, BitEnum, BitfieldNew};
+use bitbash::{bitfield, BitEnum};
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Default, Debug, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
     #[repr(transparent)]
     pub struct Descriptor([u32; 4]);
+
+    pub new(ty);
 
     pub field offset: usize = 0[0..16] ~ 1[16..32] ~ 2[0..32];
     pub field segment: u16 = 0[16..32];
@@ -17,7 +19,6 @@ bitfield! {
 
 #[derive(BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
 pub enum Type {
-    Reserved = 0b0000,
     Interrupt = 0b1110,
     Trap = 0b1111,
 }
@@ -29,7 +30,7 @@ pub struct Idt(pub [Descriptor; IDT_LEN]);
 
 impl Idt {
     pub const fn new() -> Idt {
-        Idt([Descriptor::new(); IDT_LEN])
+        Idt([Descriptor::new(Type::Interrupt); IDT_LEN])
     }
 
     pub unsafe fn load(this: Pin<&Self>) {

@@ -1,4 +1,4 @@
-use brutos_util_macros::bitfield;
+use bitbash::bitfield;
 
 pub struct Cpuid {
     pub eax: u32,

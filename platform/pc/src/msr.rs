@@ -1,5 +1,7 @@
+use bitbash::bitfield;
+
 use brutos_memory_units::PhysAddr;
-use brutos_util_macros::{bitfield, BitfieldNew, ConvertInner};
+use brutos_util_macros::ConvertInner;
 
 unsafe fn read_address(addr: u32) -> u64 {
     let (lo, hi): (u64, u64);
@@ -75,6 +77,8 @@ bitfield! {
     #[derive(Copy, Clone, ConvertInner)]
     pub struct ApicBase(u64);
 
+    pub new();
+
     pub field bsp: bool = [8];
     pub field x2apic_enabled: bool = [10];
     pub field enabled: bool = [11];
@@ -84,6 +88,8 @@ bitfield! {
 bitfield! {
     #[derive(Copy, Clone, ConvertInner)]
     pub struct Pat(u64);
+
+    pub new();
 
     pub field pa0: usize = [0..3];
     pub field pa1: usize = [8..11];
@@ -99,6 +105,8 @@ bitfield! {
     #[derive(Copy, Clone, ConvertInner)]
     pub struct Efer(u64);
 
+    pub new();
+
     pub field syscall_enabled: bool = [0];
     pub field ia32_enabled: bool = [8];
     #[ro] pub field ia32_active: bool = [10];
@@ -106,8 +114,10 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, ConvertInner)]
     pub struct Star(u64);
+
+    pub new();
 
     pub field kernel_selector: u16 = [32..48];
     pub field user_selector: u16 = [48..64];

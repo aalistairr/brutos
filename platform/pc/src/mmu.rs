@@ -3,16 +3,19 @@ use core::fmt;
 use core::ops::{Not, Range};
 use core::ptr;
 
+use bitbash::bitfield;
+
 use brutos_alloc::OutOfMemory;
 use brutos_memory_units::{PhysAddr, VirtAddr};
 use brutos_util::uint::UInt;
-use brutos_util_macros::{bitfield, BitfieldNew};
 
 use brutos_memory_units::MmuFlags as Flags;
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Default, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Default)]
     pub struct Entry(usize);
+
+    pub new();
 
     pub field present: bool = [0];
     pub field ps: bool = [7];
@@ -214,7 +217,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             parent_entry_cell: Option<&mut EntryCell>,
         ) -> Result<&'a mut Table, MapError> {
             let mut entry = entry_cell.load_nonvolatile();
-            if !entry.is_present() {
+            if !entry.present() {
                 if ALLOC {
                     entry = create_table(cx, entry_cell, parent_entry_cell)?;
                 } else {
@@ -293,7 +296,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
             parent_entry_cell: Option<&mut EntryCell>,
         ) -> bool {
             let entry = entry_cell.load_nonvolatile();
-            if entry.is_present() {
+            if entry.present() {
                 if is_ps(entry) || entry.population() > 0 {
                     return true;
                 }
@@ -309,7 +312,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool> Drop
         }
 
         fn pde_pdpe_check(entry: Entry) -> bool {
-            entry.is_ps()
+            entry.ps()
         }
 
         fn pml4e_roote_check(_: Entry) -> bool {
@@ -374,7 +377,7 @@ pub fn map_entry_replace<Cx: Context, const ALLOC: bool>(
             .with_writethrough(flags.writethrough),
     );
 
-    if !old_entry.is_present() {
+    if !old_entry.present() {
         parent_entry_cell
             .unwrap()
             .map_nonvolatile(Entry::with_inc_population);
@@ -402,7 +405,7 @@ pub fn map_entry_keep<Cx: Context, const ALLOC: bool>(
     let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
 
     let old_entry = entry_cell.load_nonvolatile();
-    if old_entry.is_present() {
+    if old_entry.present() {
         return Ok(false);
     }
 
@@ -445,7 +448,7 @@ pub fn unmap_entry<Cx: Context, const ALLOC: bool>(
     let old_entry = entry_cell.load_nonvolatile();
     entry_cell.store(Entry::new());
 
-    if old_entry.is_present() {
+    if old_entry.present() {
         invlpg(virt_addr);
         parent_entry_cell
             .unwrap()
@@ -468,7 +471,7 @@ pub fn get_entry<Cx: Context>(
     let mut trail = Trail::<_, false, false>::new(cx, root);
     let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
     let entry = entry_cell.load_nonvolatile();
-    if entry.is_present() {
+    if entry.present() {
         Ok(Some(entry))
     } else {
         Ok(None)
@@ -486,7 +489,7 @@ pub fn compare_and_swap<Cx: Context>(
 ) -> Result<bool, MapError> {
     assert!(lvl < Level::Root);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
-    assert!(current.is_present());
+    assert!(current.present());
 
     let mut trail = Trail::<_, false, true>::new(cx, root);
     let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
@@ -1335,7 +1338,7 @@ mod tests {
             assert!(addr.is_aligned(entry_size(PT)));
 
             let root_e = root.load_nonvolatile();
-            if !root_e.is_present() {
+            if !root_e.present() {
                 panic!()
             }
 
@@ -1343,7 +1346,7 @@ mod tests {
             let pml4_i = table_index(Level::Pml4, addr);
             let pml4_ec = unsafe { &*pml4.add(pml4_i) };
             let pml4_e = pml4_ec.load();
-            if !pml4_e.is_present() {
+            if !pml4_e.present() {
                 panic!()
             }
 
@@ -1351,7 +1354,7 @@ mod tests {
             let pdp_i = table_index(Level::Pdp, addr);
             let pdp_ec = unsafe { &*pdp.add(pdp_i) };
             let pdp_e = pdp_ec.load();
-            if !pdp_e.is_present() || pdp_e.is_ps() {
+            if !pdp_e.present() || pdp_e.ps() {
                 panic!()
             }
 
@@ -1359,14 +1362,14 @@ mod tests {
             let pd_i = table_index(Level::Pd, addr);
             let pd_ec = unsafe { &mut *pd.add(pd_i) };
             let pd_e = pd_ec.load();
-            if !pd_e.is_present() || pd_e.is_ps() {
+            if !pd_e.present() || pd_e.ps() {
                 panic!()
             }
 
             let pt = cx.map_table(pd_e.address()) as *mut EntryCell;
             let pt_i = table_index(Level::Pt, addr);
             let pt_ec = unsafe { &mut *pt.add(pt_i) };
-            let was_present = pt_ec.load().is_present();
+            let was_present = pt_ec.load().present();
             pt_ec.store(
                 Entry::new()
                     .with_present(true)

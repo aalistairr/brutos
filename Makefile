@@ -19,6 +19,9 @@ BUILD_DIR ?= target/$(TARGET)/$(CFG)
 
 export RUSTFLAGS
 
+RUST_TARGET_PATH = $(shell pwd)
+export RUST_TARGET_PATH
+
 $(BUILD_DIR)/brutos-kernel: always-run kernel/src/arch/x86_64/page_tables.S kernel/src/arch/x86_64/interrupt/entry.rs
 	xargo rustc -p brutos-kernel --target $(TARGET) $(CARGO_FLAGS) -- -C link-arg=-Tkernel/$(ARCH).lds -C link-arg=-n $(CARGO_FLAGS_RUSTFLAGS)
 

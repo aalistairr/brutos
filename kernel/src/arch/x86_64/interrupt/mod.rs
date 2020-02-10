@@ -2,6 +2,8 @@ use core::cmp::max;
 use core::convert::TryInto;
 use core::pin::Pin;
 
+use bitbash::bitfield;
+
 use brutos_memory_units::VirtAddr;
 use brutos_memory_vm::{FaultConditions, PageFaultError};
 use brutos_platform_pc as pc;
@@ -12,7 +14,6 @@ use brutos_platform_pc::interrupt::InterruptStackFrame;
 use brutos_platform_pc::msr;
 use brutos_sync::spinlock::Spinlock;
 use brutos_task::arch::{tss_mut, GDT_CODE_KERN};
-use brutos_util_macros::bitfield;
 
 use crate::Cx;
 
@@ -144,10 +145,10 @@ fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     };
     let error = PageFaultErrorCode(error);
     let fault_conditions = FaultConditions {
-        was_present: error.is_present(),
-        was_write: error.is_write(),
-        was_instruction_fetch: error.is_instruction_fetch(),
-        was_user_access: error.is_user_mode(),
+        was_present: error.present(),
+        was_write: error.write(),
+        was_instruction_fetch: error.instruction_fetch(),
+        was_user_access: error.user_mode(),
     };
     match addr_space.vm().page_fault(fault_addr, fault_conditions) {
         Ok(()) => (),
@@ -237,7 +238,7 @@ unsafe fn setup_apic() {
     drop(apic);
 
     let tsc_freq = cpuid::leaf::CoreCrystalClock::get().tsc_freq();
-    if cpuid::leaf::InvariantTsc::get().is_available() && tsc_freq.is_some() {
+    if cpuid::leaf::InvariantTsc::get().available() && tsc_freq.is_some() {
         let tsc_freq = tsc_freq.expect("failed to get tsc frequency");
         USE_TSC = true;
         println!("tsc frequency: {}Hz", tsc_freq);
@@ -347,10 +348,9 @@ unsafe fn determine_bus_freq() -> usize {
     let initial_count_reg_ptr: *mut u32 = apic.register_as_mut_ptr::<apic::reg::InitialCount>();
     let current_count_reg_ptr: *mut u32 = apic.register_as_mut_ptr::<apic::reg::CurrentCount>();
 
-    idt_mut()[0x20] = Descriptor::new()
+    idt_mut()[0x20] = Descriptor::new(Type::Interrupt)
         .with_offset(pit_tick as usize)
         .with_segment(brutos_task::arch::GDT_CODE_KERN)
-        .with_ty(Type::Interrupt)
         .with_present(true);
     pc::interrupt::pit::initialize();
     pc::interrupt::initialize_pic(0x20, 0x40);
@@ -363,7 +363,7 @@ unsafe fn determine_bus_freq() -> usize {
     mask();
     pc::interrupt::disable_pic();
 
-    idt_mut()[0x20] = Descriptor::new();
+    idt_mut()[0x20] = Descriptor::new(Type::Interrupt);
 
     bus_freq
 }
@@ -371,10 +371,9 @@ unsafe fn determine_bus_freq() -> usize {
 unsafe fn setup_idt() {
     let mut idt = idt_mut();
     for i in 0..256 {
-        idt[i] = Descriptor::new()
+        idt[i] = Descriptor::new(Type::Interrupt)
             .with_offset(self::entry::ENTRY_FUNCTIONS[i] as usize)
             .with_segment(brutos_task::arch::GDT_CODE_KERN)
-            .with_ty(Type::Interrupt)
             .with_present(true);
         if i == vector::NMI as usize {
             idt[i].set_ist(NMI_IST);

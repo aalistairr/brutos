@@ -1,8 +1,8 @@
 use core::cell::UnsafeCell;
 use core::ptr;
 
+use bitbash::{bitfield, BitEnum};
 use brutos_memory_units::PhysAddr;
-use brutos_util_macros::{bitfield, BitEnum, BitfieldNew};
 
 use crate::io::outb;
 
@@ -13,9 +13,11 @@ pub struct Character {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     #[repr(transparent)]
     pub struct Style(u8);
+
+    pub new();
 
     pub field foreground: Color = [0..4];
     pub field background: Color = [4..8];

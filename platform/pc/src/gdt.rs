@@ -1,6 +1,6 @@
 use core::pin::Pin;
 
-use brutos_util_macros::{bitfield, BitEnum};
+use bitbash::{bitfield, BitEnum};
 
 pub unsafe fn load<T>(gdt: Pin<&T>) {
     assert!(core::mem::size_of::<T>() % 4 == 0);

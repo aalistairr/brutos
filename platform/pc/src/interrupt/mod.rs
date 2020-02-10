@@ -51,7 +51,7 @@ pub unsafe fn disable_pic() {
 }
 
 pub mod pit {
-    use brutos_util_macros::bitfield;
+    use bitbash::bitfield;
 
     use crate::io::outb;
 

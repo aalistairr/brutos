@@ -1,6 +1,8 @@
 use core::cell::UnsafeCell;
 
-use brutos_util_macros::{bitfield, BitEnum, BitfieldNew, ConvertInner};
+use bitbash::{bitfield, BitEnum};
+
+use brutos_util_macros::ConvertInner;
 
 use crate::msr::{self, RW as _};
 
@@ -198,8 +200,10 @@ pub enum TriggerMode {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, ConvertInner)]
     pub struct Timer(u32);
+
+    pub new();
 
     pub field vector: u8 = [0..8];
     #[ro] pub field delivery_status: DeliveryStatus = [12];
@@ -215,8 +219,10 @@ pub enum TimerMode {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, ConvertInner)]
     pub struct LInt(u32);
+
+    pub new();
 
     pub field vector: u8 = [0..8];
     pub field delivery_mode: DeliveryMode = [8..11];
@@ -234,8 +240,10 @@ pub enum PinPolarity {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct LvtRegister(u32);
+
+    pub new();
 
     pub field vector: u8 = [0..8];
     pub field delivery_mode: DeliveryMode = [8..11];
@@ -244,8 +252,10 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct ErrorRegister(u32);
+
+    pub new();
 
     pub field vector: u8 = [0..8];
     #[ro] pub field delivery_status: DeliveryStatus = [12];
@@ -267,8 +277,10 @@ bitfield! {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct DivideConfiguration(u32);
+
+    pub new();
 
     pub field divide_value: DivideValue = [0..2] ~ [3];
 }
@@ -286,8 +298,10 @@ pub enum DivideValue {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug)]
     pub struct InterruptCommand([u32; 2]);
+
+    pub new();
 
     pub field vector: u8 = 0[0..8];
     pub field delivery_mode: DeliveryMode = 0[8..11];
@@ -314,15 +328,19 @@ pub enum DestinationShorthand {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct LogicalDestination(u32);
+
+    pub new();
 
     pub field logical_apic_id: u8 = [24..32];
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct DestinationFormat(u32);
+
+    pub new();
 
     pub field model: Model = [28..32];
 }
@@ -334,8 +352,10 @@ pub enum Model {
 }
 
 bitfield! {
-    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner, BitfieldNew)]
+    #[derive(Copy, Clone, PartialEq, Eq, Debug, ConvertInner)]
     pub struct SpuriousInterruptVector(u32);
+
+    pub new();
 
     pub field vector: u8 = [0..8];
     pub field apic_enabled: bool = [8];
