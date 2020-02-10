@@ -1,7 +1,7 @@
 use bitbash::bitfield;
 
 use brutos_memory_units::PhysAddr;
-use brutos_util_macros::ConvertInner;
+use brutos_util::ConvertInner;
 
 unsafe fn read_address(addr: u32) -> u64 {
     let (lo, hi): (u64, u64);

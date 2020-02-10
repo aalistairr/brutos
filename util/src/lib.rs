@@ -8,6 +8,8 @@ pub mod macros;
 pub mod pointer;
 pub mod uint;
 
+pub use brutos_util_macros::{selector, ConvertInner};
+
 pub use self::uint::UInt;
 
 pub enum Void {}

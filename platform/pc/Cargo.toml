@@ -10,6 +10,5 @@ edition = "2018"
 brutos-alloc = { path = "../../alloc" }
 brutos-memory-units = { path = "../../memory/units" }
 brutos-util = { path = "../../util" }
-brutos-util-macros = { path = "../../util/macros" }
 
 bitbash = { version = "0.2.0", features = ["const"] }

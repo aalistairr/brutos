@@ -176,7 +176,7 @@ impl Info {
     }
 }
 
-brutos_util_macros::selector!(SlabSel: Unique<Slab> => node);
+brutos_util::selector!(SlabSel: Unique<Slab> => node);
 struct Slab {
     free_count: usize,
     entry_mask: [Mask; MASK_LEN],

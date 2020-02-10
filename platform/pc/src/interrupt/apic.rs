@@ -2,7 +2,7 @@ use core::cell::UnsafeCell;
 
 use bitbash::{bitfield, BitEnum};
 
-use brutos_util_macros::ConvertInner;
+use brutos_util::ConvertInner;
 
 use crate::msr::{self, RW as _};
 

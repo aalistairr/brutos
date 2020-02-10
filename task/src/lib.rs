@@ -43,7 +43,7 @@ pub struct Task<Cx: Context> {
     waitq_node: Node<WaitQSel<Cx>>,
 }
 
-brutos_util_macros::selector!(pub WaitQSel<Cx: Context>: Arc<Task<Cx>, Cx> => waitq_node);
+brutos_util::selector!(pub WaitQSel<Cx: Context>: Arc<Task<Cx>, Cx> => waitq_node);
 
 unsafe impl<Cx: Send + Context> Send for Task<Cx> {}
 unsafe impl<Cx: Send + Context> Sync for Task<Cx> {}

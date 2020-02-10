@@ -18,7 +18,6 @@ brutos-platform-pc = { path = "../platform/pc" }
 brutos-task = { path = "../task" }
 brutos-sync = { path = "../sync" }
 brutos-util = { path = "../util" }
-brutos-util-macros = { path = "../util/macros" }
 
 bitbash = { version = "0.2.0", features = ["const"] }
 

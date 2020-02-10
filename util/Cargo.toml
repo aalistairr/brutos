@@ -12,3 +12,4 @@ std = []
 
 [dependencies]
 brutos-alloc = { path = "../alloc", optional = true }
+brutos-util-macros = { path = "macros" }

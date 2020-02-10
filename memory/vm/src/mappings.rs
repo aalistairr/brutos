@@ -15,7 +15,7 @@ pub struct Mappings<T, Cx: Context<T>> {
     mappings: LinkedList<MappingSel<T, Cx>>,
 }
 
-brutos_util_macros::selector!(MappingSel<T, Cx: Context<T>>: Arc<Mapping<T, Cx>, Cx> => node);
+brutos_util::selector!(MappingSel<T, Cx: Context<T>>: Arc<Mapping<T, Cx>, Cx> => node);
 pub struct Mapping<T, Cx: Context<T>> {
     pub range: Range<VirtAddr>,
     pub flags: Flags,

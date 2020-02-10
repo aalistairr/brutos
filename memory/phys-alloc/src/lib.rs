@@ -41,7 +41,7 @@ impl<'a, T> Region<'a, T> {
     }
 }
 
-brutos_util_macros::selector!(PageSel<'a, T: 'a>: &'a Page<'a, T> => node);
+brutos_util::selector!(PageSel<'a, T: 'a>: &'a Page<'a, T> => node);
 #[derive(Debug)]
 struct Page<'a, T> {
     region: usize,
