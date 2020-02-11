@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "alloc",
+    "cpio",
     "kernel",
     "memory/phys-alloc",
     "memory/slab-alloc",
