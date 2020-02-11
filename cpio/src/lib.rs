@@ -1,46 +1,24 @@
 #![no_std]
 
-use core::num::ParseIntError;
 use core::str::{self, Utf8Error};
 
+use brutos_util::byte_stream::{ByteBuffer, ByteStream, ReadError};
 use brutos_util::iter::unfold;
 
-#[derive(Clone, Debug)]
 pub enum Error {
-    UnexpectedEof,
-    Utf8(Utf8Error),
-    ParseInt(ParseIntError),
+    Read(ReadError),
     Invalid,
+}
+
+impl From<ReadError> for Error {
+    fn from(e: ReadError) -> Error {
+        Error::Read(e)
+    }
 }
 
 impl From<Utf8Error> for Error {
     fn from(e: Utf8Error) -> Error {
-        Error::Utf8(e)
-    }
-}
-
-impl From<ParseIntError> for Error {
-    fn from(e: ParseIntError) -> Error {
-        Error::ParseInt(e)
-    }
-}
-
-struct ByteStream<'a>(&'a [u8]);
-
-impl<'a> ByteStream<'a> {
-    fn read(&mut self, len: usize) -> Result<&'a [u8], Error> {
-        if len > self.0.len() {
-            return Err(Error::UnexpectedEof);
-        }
-        let (x, xs) = self.0.split_at(len);
-        self.0 = xs;
-        Ok(x)
-    }
-
-    fn read_octal(&mut self, len: usize) -> Result<usize, Error> {
-        let bytes = self.read(len)?;
-        let s = str::from_utf8(bytes)?;
-        Ok(usize::from_str_radix(s, 8)?)
+        Error::Read(ReadError::Utf8(e))
     }
 }
 
@@ -59,20 +37,20 @@ pub struct Header {
     pub filesize: usize,
 }
 
-impl<'a> ByteStream<'a> {
-    pub fn read_header(&mut self) -> Result<Header, Error> {
+impl Header {
+    pub fn read(bytes: ByteStream) -> Result<Header, ReadError> {
         Ok(Header {
-            magic: self.read_octal(6)?,
-            dev: self.read_octal(6)?,
-            ino: self.read_octal(6)?,
-            mode: self.read_octal(6)?,
-            uid: self.read_octal(6)?,
-            gid: self.read_octal(6)?,
-            nlink: self.read_octal(6)?,
-            rdev: self.read_octal(6)?,
-            mtime: self.read_octal(11)?,
-            namesize: self.read_octal(6)?,
-            filesize: self.read_octal(11)?,
+            magic: bytes.read_ascii_octal(6)?,
+            dev: bytes.read_ascii_octal(6)?,
+            ino: bytes.read_ascii_octal(6)?,
+            mode: bytes.read_ascii_octal(6)?,
+            uid: bytes.read_ascii_octal(6)?,
+            gid: bytes.read_ascii_octal(6)?,
+            nlink: bytes.read_ascii_octal(6)?,
+            rdev: bytes.read_ascii_octal(6)?,
+            mtime: bytes.read_ascii_octal(11)?,
+            namesize: bytes.read_ascii_octal(6)?,
+            filesize: bytes.read_ascii_octal(11)?,
         })
     }
 }
@@ -84,25 +62,25 @@ pub struct Entry<'a> {
     pub contents: &'a [u8],
 }
 
-impl<'a> ByteStream<'a> {
-    fn read_entry(&mut self) -> Result<Entry<'a>, Error> {
-        let header = self.read_header()?;
+impl<'a> Entry<'a> {
+    fn read(bytes: &mut ByteBuffer<'a>) -> Result<Entry<'a>, Error> {
+        let header = Header::read(bytes)?;
         Ok(Entry {
             header,
-            filename: match self.read(header.namesize)? {
+            filename: match bytes.read_bytes(header.namesize)? {
                 [] | [0] => None,
                 [bytes @ .., 0] => Some(str::from_utf8(bytes)?),
                 _ => return Err(Error::Invalid),
             },
-            contents: self.read(header.filesize)?,
+            contents: bytes.read_bytes(header.filesize)?,
         })
     }
 }
 
 pub fn entries(cpio: &[u8]) -> impl Iterator<Item = Result<Entry, Error>> {
-    unfold(Some(ByteStream(cpio)), |stream| match stream.take() {
+    unfold(Some(ByteBuffer(cpio)), |stream| match stream.take() {
         None => None,
-        Some(mut s) => match s.read_entry() {
+        Some(mut s) => match Entry::read(&mut s) {
             Err(e) => Some(Err(e)),
             Ok(e) if e.filename == Some("TRAILER!!") => None,
             Ok(e) => {

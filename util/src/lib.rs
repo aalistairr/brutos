@@ -1,6 +1,7 @@
 #![cfg_attr(not(any(test, feature = "std")), no_std)]
 #![feature(const_fn)]
 
+pub mod byte_stream;
 pub mod iter;
 pub mod linked_list;
 #[doc(hidden)]
