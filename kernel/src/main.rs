@@ -32,6 +32,7 @@ const STACK_SIZE: usize = 16 * PAGE_SIZE;
 #[macro_use]
 pub mod arch;
 pub mod memory;
+pub mod syscall;
 
 pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
     println!("Loading BrutOS");

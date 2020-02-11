@@ -10,6 +10,7 @@ members = [
     "multiboot2",
     "platform/pc",
     "sync",
+    "syscall",
     "task",
     "util",
     "util/macros",

@@ -1,4 +1,5 @@
 use brutos_platform_pc::msr;
+use brutos_syscall as sc;
 
 pub unsafe fn initialize() {
     msr::write::<msr::Ia32Star>(
@@ -39,8 +40,6 @@ pub unsafe fn syscall_entry() {
     asm!("
     .global syscall_unswapped_gs_prefix_start
     .global syscall_unswapped_gs_prefix_end
-    .global syscall_unswapped_gs_postfix_start
-    .global syscall_unswapped_gs_postfix_end
     syscall_unswapped_gs_prefix_start:
         swapgs
     syscall_unswapped_gs_prefix_end:
@@ -54,8 +53,22 @@ pub unsafe fn syscall_entry() {
         push %r11
 
         mov %r10, %rcx
-        call handle_syscall
+        call syscall_entry_rust
+    " :::: "volatile");
+}
 
+pub unsafe fn syscall_return(
+    ret0: usize,
+    ret1: usize,
+    ret2: usize,
+    ret3: usize,
+    ret4: usize,
+    ret5: usize,
+    ret6: usize,
+) -> ! {
+    asm!("
+    .global syscall_unswapped_gs_postfix_start
+    .global syscall_unswapped_gs_postfix_end
         pop %r11
         pop %rcx
         pop %r10
@@ -66,36 +79,36 @@ pub unsafe fn syscall_entry() {
         swapgs
         sysret
     syscall_unswapped_gs_postfix_end:
-    " :::: "volatile");
+    " :: "{rax}" (ret0), "{rdi}" (ret1), "{rsi}" (ret2), "{rdx}" (ret3), "{r10}" (ret4), "{r8}" (ret5), "{r9}" (ret6) : "memory" : "volatile");
+    unreachable!();
 }
 
 #[no_mangle]
-pub extern "C" fn handle_syscall(
-    _arg1: usize,
-    _arg2: usize,
-    _arg3: usize,
-    _arg4: usize,
-    _arg5: usize,
-    _arg6: usize,
-) -> usize {
-    unimplemented!()
-}
-
-pub fn perform_syscall(
+pub unsafe extern "C" fn syscall_entry_rust(
     arg1: usize,
     arg2: usize,
     arg3: usize,
     arg4: usize,
     arg5: usize,
     arg6: usize,
-) -> usize {
-    unsafe {
-        let r: usize;
-        asm!("syscall"
-            : "={rax}" (r)
-            : "{rdi}" (arg1), "{rsi}" (arg2), "{rdx}" (arg3), "{r10}" (arg4), "{r8}" (arg5), "{r9}" (arg6)
-            : "memory", "rcx", "r11", "rdi", "rsi", "rdx", "r10", "r8", "r9"
-            : "volatile");
-        r
+) -> ! {
+    let (r0, r1, r2, r3, r4, r5, r6) = handle_syscall(arg1, arg2, arg3, arg4, arg5, arg6);
+    syscall_return(r0, r1, r2, r3, r4, r5, r6);
+}
+
+pub fn handle_syscall(
+    arg1: usize,
+    arg2: usize,
+    _arg3: usize,
+    _arg4: usize,
+    _arg5: usize,
+    _arg6: usize,
+) -> (usize, usize, usize, usize, usize, usize, usize) {
+    let r0;
+    let (r1, r2, r3, r4, r5, r6) = (0, 0, 0, 0, 0, 0);
+    match arg1 {
+        sc::DEBUG_PRINT_CHAR => r0 = crate::syscall::debug_print_char(arg2),
+        _ => r0 = !0,
     }
+    (r0, r1, r2, r3, r4, r5, r6)
 }
