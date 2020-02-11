@@ -1,30 +1,38 @@
 use core::marker::PhantomData;
 
-pub fn unfold_opt<T, U, F, R>(seed: Option<T>, f: F) -> Unfold<T, U, F, R>
+pub struct Unfold_<T, U, F> {
+    seed: T,
+    f: F,
+    _marker: PhantomData<U>,
+}
+
+impl<T, U, F> Iterator for Unfold_<T, U, F>
 where
-    F: FnMut(T) -> R,
-    R: UnfoldRet<T, U>,
+    F: FnMut(&mut T) -> Option<U>,
 {
-    Unfold {
+    type Item = U;
+
+    fn next(&mut self) -> Option<U> {
+        (self.f)(&mut self.seed)
+    }
+}
+
+pub fn unfold<T, U, F>(seed: T, f: F) -> Unfold_<T, U, F>
+where
+    F: FnMut(&mut T) -> Option<U>,
+{
+    Unfold_ {
         seed,
         f,
         _marker: PhantomData,
     }
 }
 
-pub fn unfold<T, U, F, R>(seed: T, f: F) -> Unfold<T, U, F, R>
-where
-    F: FnMut(T) -> R,
-    R: UnfoldRet<T, U>,
-{
-    unfold_opt(Some(seed), f)
-}
-
-pub trait UnfoldRet<T, U> {
+pub trait UnfoldValueRet<T, U> {
     fn unpack(self) -> (Option<T>, Option<U>);
 }
 
-impl<T, U> UnfoldRet<T, U> for (Option<T>, U) {
+impl<T, U> UnfoldValueRet<T, U> for (Option<T>, U) {
     fn unpack(self) -> (Option<T>, Option<U>) {
         match self {
             (Some(t), u) => (Some(t), Some(u)),
@@ -33,7 +41,7 @@ impl<T, U> UnfoldRet<T, U> for (Option<T>, U) {
     }
 }
 
-impl<T, U> UnfoldRet<T, U> for Option<(T, U)> {
+impl<T, U> UnfoldValueRet<T, U> for Option<(T, U)> {
     fn unpack(self) -> (Option<T>, Option<U>) {
         match self {
             Some((t, u)) => (Some(t), Some(u)),
@@ -42,28 +50,35 @@ impl<T, U> UnfoldRet<T, U> for Option<(T, U)> {
     }
 }
 
-pub struct Unfold<T, U, F, R>
+pub fn unfold_value_opt<T, U, F, R>(
+    seed: Option<T>,
+    mut f: F,
+) -> Unfold_<Option<T>, U, impl FnMut(&mut Option<T>) -> Option<U>>
 where
     F: FnMut(T) -> R,
-    R: UnfoldRet<T, U>,
+    R: UnfoldValueRet<T, U>,
 {
-    seed: Option<T>,
-    f: F,
-    _marker: PhantomData<U>,
+    let f = move |seed: &mut Option<T>| {
+        seed.take().and_then(|s_0| {
+            let (s_1, u) = f(s_0).unpack();
+            *seed = s_1;
+            u
+        })
+    };
+    Unfold_ {
+        seed,
+        f,
+        _marker: PhantomData,
+    }
 }
 
-impl<T, U, F, R> Iterator for Unfold<T, U, F, R>
+pub fn unfold_value<T, U, F, R>(
+    seed: T,
+    f: F,
+) -> Unfold_<Option<T>, U, impl FnMut(&mut Option<T>) -> Option<U>>
 where
     F: FnMut(T) -> R,
-    R: UnfoldRet<T, U>,
+    R: UnfoldValueRet<T, U>,
 {
-    type Item = U;
-
-    fn next(&mut self) -> Option<U> {
-        self.seed.take().and_then(|x_0| {
-            let (x_1, y) = (self.f)(x_0).unpack();
-            self.seed = x_1;
-            y
-        })
-    }
+    unfold_value_opt(Some(seed), f)
 }

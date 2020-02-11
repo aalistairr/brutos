@@ -6,7 +6,7 @@ use core::pin::Pin;
 use brutos_memory_units::arch::PAGE_SIZE;
 use brutos_memory_units::PhysAddr;
 
-use brutos_util::iter::unfold;
+use brutos_util::iter::unfold_value;
 use brutos_util::uint::UInt;
 
 use super::MAX_ORDER;
@@ -152,7 +152,7 @@ impl<'a, T: Default> Allocator<'a, T> {
 
 fn trees(r: Range<PhysAddr>) -> impl Iterator<Item = (usize, u8)> {
     assert!(r.start.is_aligned(PAGE_SIZE) && r.end.is_aligned(PAGE_SIZE));
-    unfold((r, 0), |(r, i)| {
+    unfold_value((r, 0), |(r, i)| {
         assert!(r.start <= r.end);
         if r.start == r.end {
             return None;
