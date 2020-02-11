@@ -32,9 +32,16 @@ kernel/src/arch/x86_64/interrupt/entry.rs: kernel/src/arch/x86_64/interrupt/entr
 	python3 $^ > $@
 
 
-$(BUILD_DIR)/brutos-kernel.iso: $(BUILD_DIR)/brutos-kernel
+$(BUILD_DIR)/brutos-init: always-run
+	xargo rustc -p brutos-init --target $(TARGET) $(CARGO_FLAGS) -- $(CARGO_FLAGS_RUSTFLAGS)
+
+$(BUILD_DIR)/brutos-init.cpio: $(BUILD_DIR)/brutos-init
 	rm -f $@
-	cd $(BUILD_DIR); xorriso -outdev brutos-kernel.iso -add brutos-kernel
+	cd $(BUILD_DIR); echo brutos-init | cpio -o > brutos-init.cpio
+
+$(BUILD_DIR)/brutos-kernel.iso: $(BUILD_DIR)/brutos-kernel $(BUILD_DIR)/brutos-init.cpio
+	rm -f $@
+	cd $(BUILD_DIR); xorriso -outdev brutos-kernel.iso -add brutos-kernel brutos-init.cpio
 
 $(BUILD_DIR)/brutos-kernel.vmdk: $(BUILD_DIR)/brutos-kernel.iso
 	rm -f $@

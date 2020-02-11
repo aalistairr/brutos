@@ -31,10 +31,14 @@ const STACK_SIZE: usize = 16 * PAGE_SIZE;
 
 #[macro_use]
 pub mod arch;
+pub mod init;
 pub mod memory;
 pub mod syscall;
 
-pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
+pub unsafe fn main(
+    mmap: impl Clone + Iterator<Item = Range<PhysAddr>>,
+    _init_module: Option<&[u8]>,
+) -> ! {
     println!("Loading BrutOS");
     memory::initialize();
     initialize_task_allocator();
@@ -49,6 +53,15 @@ pub unsafe fn main(mmap: impl Clone + Iterator<Item = Range<PhysAddr>>) -> ! {
 
     create_idle_task().expect("failed to create idle task");
     create_janitor().expect("failed to create janitor");
+
+    // if let Some(init_module) = init_module {
+    //     match init::run_init(init_module) {
+    //         Ok(()) => unreachable!(),
+    //         Err(e) => panic!("failed to run init: {:?}", e),
+    //     }
+    // } else {
+    //     panic!("nothing to do");
+    // }
 
     for i in 0..32 {
         scheduler().as_ref().schedule(
@@ -236,6 +249,23 @@ unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
     addr_space.vm().initialize();
     arch::memory::create_kernel_mappings(addr_space);
     Ok(())
+}
+
+fn create_user_address_space() -> Result<Pin<Arc<AddressSpace, Cx>>, vm::mmu::MapError> {
+    let addr_space = Arc::pin(AddressSpace {
+        is_alive: AtomicBool::new(true),
+        vm: vm::Space::new(crate::arch::memory::USER_ADDR_SPACE_RANGE, unsafe {
+            crate::arch::memory::create_user_mmu_tables()?
+        }),
+    })
+    .map_err(|(e, space)| {
+        unsafe {
+            crate::arch::memory::destroy_user_mmu_tables(Mutex::into_inner(space.vm.mmu_tables));
+        }
+        e
+    })?;
+    addr_space.vm().initialize();
+    Ok(addr_space)
 }
 
 impl AddressSpace {

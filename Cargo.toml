@@ -3,6 +3,7 @@ members = [
     "alloc",
     "cpio",
     "elf",
+    "init",
     "kernel",
     "memory/phys-alloc",
     "memory/slab-alloc",

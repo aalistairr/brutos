@@ -1,4 +1,5 @@
 use core::pin::Pin;
+use core::slice;
 
 use brutos_alloc::OutOfMemory;
 use brutos_memory_traits::AllocPhysPage;
@@ -10,6 +11,7 @@ use brutos_platform_pc as pc;
 use brutos_sync::mutex::Mutex;
 use brutos_task as task;
 
+use crate::memory::CutRange;
 use crate::Cx;
 
 #[macro_export]
@@ -91,8 +93,26 @@ pub extern "C" fn multiboot2_entry(multiboot_info_addr: PhysAddr) -> ! {
         .map(|entry| entry.range.clone());
     let mmap = self::memory::remove_reserved_memory(multiboot_range, mmap);
 
+    let mut mmap_cut_module = PhysAddr(0)..PhysAddr(0);
+    let mut init_module = None;
+    for tag in multiboot_info.tags() {
+        match tag {
+            Tag::Module { range, .. } => {
+                mmap_cut_module = range.clone();
+                let module_size = range.end - range.start;
+                let module = memory::map_phys_ident(range.start, module_size)
+                    .expect("failed to map init module");
+                let module = unsafe { slice::from_raw_parts(module.as_ptr(), module_size) };
+                init_module = Some(module);
+            }
+            _ => (),
+        }
+    }
+
+    let mmap = CutRange::new(mmap, mmap_cut_module);
+
     unsafe {
-        crate::main(mmap);
+        crate::main(mmap, init_module);
     }
 }
 

@@ -94,16 +94,54 @@ pub fn remove_reserved_memory(
     mmap
 }
 
+static mut KERNEL_PML4: [mmu::arch::Entry; 256] = [mmu::arch::Entry::new(); 256];
+
 pub unsafe fn create_kernel_mmu_tables() -> Result<mmu::Tables, OutOfMemory> {
-    Ok(mmu::Tables::with_root(
+    let mut tables = mmu::Tables::with_root(
         mmu::arch::Entry::new()
             .with_address(pml4_phys())
             .with_population(mmu::arch::Entry::PERMANENT)
             .with_present(true),
-    ))
+    );
+    for pml4e_i in 0..256 {
+        KERNEL_PML4[pml4e_i] = mmu::arch::get_entry(
+            &mut Cx,
+            &mut tables.root,
+            mmu::arch::Level::Pml4,
+            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
+        )
+        .expect("failed to create kernel mmu tables")
+        .unwrap_or(mmu::arch::Entry::new());
+    }
+    Ok(tables)
 }
 
 pub unsafe fn destroy_kernel_mmu_tables(_tables: mmu::Tables) {}
+
+pub unsafe fn create_user_mmu_tables() -> Result<mmu::Tables, mmu::MapError> {
+    let mut tables = mmu::Tables::new();
+    for pml4e_i in 0..256 {
+        mmu::arch::x86_64::set_entry(
+            &mut Cx,
+            &mut tables.root,
+            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
+            mmu::arch::Level::Pml4,
+            KERNEL_PML4[pml4e_i],
+        )?;
+    }
+    Ok(tables)
+}
+
+pub unsafe fn destroy_user_mmu_tables(mut tables: mmu::Tables) {
+    for pml4e_i in 0..256 {
+        let _ = mmu::arch::x86_64::clear_entry(
+            &mut Cx,
+            &mut tables.root,
+            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
+            mmu::arch::Level::Pml4,
+        );
+    }
+}
 
 static mut SHARED_ORDER9_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
     MaybeUninit::uninit();

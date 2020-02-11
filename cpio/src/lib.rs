@@ -5,6 +5,7 @@ use core::str::{self, Utf8Error};
 use brutos_util::byte_stream::{ByteBuffer, ByteStream, ReadError};
 use brutos_util::iter::unfold;
 
+#[derive(Clone, Debug)]
 pub enum Error {
     Read(ReadError),
     Invalid,
@@ -86,7 +87,7 @@ pub fn entries(cpio: &[u8]) -> impl Iterator<Item = Result<Entry, Error>> {
         None => None,
         Some(mut s) => match Entry::read(&mut s) {
             Err(e) => Some(Err(e)),
-            Ok(e) if e.filename == Some("TRAILER!!") => None,
+            Ok(e) if e.filename == Some("TRAILER!!!") => None,
             Ok(e) => {
                 *stream = Some(s);
                 Some(Ok(e))

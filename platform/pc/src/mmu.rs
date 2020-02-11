@@ -533,26 +533,72 @@ pub unsafe fn create_permanent_table<Cx: Context>(
     Ok(())
 }
 
-pub unsafe fn make_nonpermanent<Cx: Context>(
+// pub unsafe fn make_nonpermanent<Cx: Context>(
+//     cx: &mut Cx,
+//     root: &mut EntryCell,
+//     virt_addr: VirtAddr,
+//     lvl: Level,
+// ) -> Result<(), UnmapError> {
+//     assert!(lvl < Level::Root);
+//     assert!(lvl > Level::Pt);
+//     assert!(virt_addr.is_aligned(entry_size(lvl)));
+//     let mut trail = Trail::<_, false, false>::new(cx, root);
+//     let (_, parent_entry_cell) = trail
+//         .find_entry(lvl.down(), virt_addr)
+//         .map_err(|e| match e {
+//             MapError::OutOfMemory => unreachable!(),
+//             MapError::NotAllocated => UnmapError::NotAllocated,
+//             MapError::Obstructed => UnmapError::Obstructed,
+//         })?;
+//     parent_entry_cell
+//         .unwrap()
+//         .map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
+//     Ok(())
+// }
+
+pub unsafe fn set_entry<Cx: Context>(
+    cx: &mut Cx,
+    root: &mut EntryCell,
+    virt_addr: VirtAddr,
+    lvl: Level,
+    entry: Entry,
+) -> Result<(), MapError> {
+    assert!(lvl < Level::Root);
+    assert!(virt_addr.is_aligned(entry_size(lvl)));
+    if !entry.present() {
+        return Ok(());
+    }
+    let mut trail = Trail::<_, true, false>::new(cx, root);
+    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+    entry_cell.store(entry);
+    parent_entry_cell
+        .unwrap()
+        .map_nonvolatile(|e| e.with_inc_population());
+    Ok(())
+}
+
+pub unsafe fn clear_entry<Cx: Context>(
     cx: &mut Cx,
     root: &mut EntryCell,
     virt_addr: VirtAddr,
     lvl: Level,
 ) -> Result<(), UnmapError> {
     assert!(lvl < Level::Root);
-    assert!(lvl > Level::Pt);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
     let mut trail = Trail::<_, false, false>::new(cx, root);
-    let (_, parent_entry_cell) = trail
-        .find_entry(lvl.down(), virt_addr)
-        .map_err(|e| match e {
+    let (entry_cell, parent_entry_cell) =
+        trail.find_entry(lvl, virt_addr).map_err(|e| match e {
             MapError::OutOfMemory => unreachable!(),
             MapError::NotAllocated => UnmapError::NotAllocated,
             MapError::Obstructed => UnmapError::Obstructed,
         })?;
+    if !entry_cell.load_nonvolatile().present() {
+        return Ok(());
+    }
+    entry_cell.store(Entry::new());
     parent_entry_cell
         .unwrap()
-        .map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
+        .map_nonvolatile(|e| e.with_dec_population());
     Ok(())
 }
 
