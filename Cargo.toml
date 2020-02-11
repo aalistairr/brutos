@@ -2,6 +2,7 @@
 members = [
     "alloc",
     "cpio",
+    "elf",
     "kernel",
     "memory/phys-alloc",
     "memory/slab-alloc",

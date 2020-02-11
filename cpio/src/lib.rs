@@ -38,9 +38,13 @@ pub struct Header {
 }
 
 impl Header {
-    pub fn read(bytes: ByteStream) -> Result<Header, ReadError> {
+    pub fn read(bytes: ByteStream) -> Result<Header, Error> {
+        let magic = bytes.read_ascii_octal(6)?;
+        if magic != 0o070707 {
+            return Err(Error::Invalid);
+        }
         Ok(Header {
-            magic: bytes.read_ascii_octal(6)?,
+            magic,
             dev: bytes.read_ascii_octal(6)?,
             ino: bytes.read_ascii_octal(6)?,
             mode: bytes.read_ascii_octal(6)?,

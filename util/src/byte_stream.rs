@@ -34,6 +34,60 @@ impl<'a> ByteBuffer<'a> {
         Ok(x)
     }
 
+    pub fn read_byte(&mut self) -> Result<u8, ReadError> {
+        match self.read_bytes(1)? {
+            [byte] => Ok(*byte),
+            _ => unreachable!(),
+        }
+    }
+}
+
+pub fn fill_array(bytes: ByteStream, array: &mut [u8]) -> Result<(), ReadError> {
+    for i in 0..array.len() {
+        array[i] = bytes.read_byte()?;
+    }
+    Ok(())
+}
+
+#[macro_export]
+macro_rules! read_array {
+    ($bytes:expr, $n:expr) => {{
+        const N: usize = $n;
+        let bytes: &mut $crate::byte_stream::ByteBuffer = $bytes;
+        let mut array: [u8; N] = [0; N];
+        $crate::byte_stream::fill_array(bytes, &mut array).map(|()| array)
+    }};
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum Endianness {
+    Little,
+    Big,
+}
+
+macro_rules! read_uint {
+    ($name:ident, $t:ty) => {
+        pub fn $name<E>(&mut self, endianness: E) -> Result<$t, ReadError>
+        where
+            E: Into<Endianness>
+        {
+            let f = match endianness.into() {
+                Endianness::Little => <$t>::from_le_bytes,
+                Endianness::Big => <$t>::from_be_bytes,
+            };
+            Ok(f(read_array!(self, core::mem::size_of::<$t>())?))
+        }
+    }
+}
+
+impl<'a> ByteBuffer<'a> {
+    read_uint!(read_u16, u16);
+    read_uint!(read_u32, u32);
+    read_uint!(read_u64, u64);
+    read_uint!(read_u128, u128);
+}
+
+impl<'a> ByteBuffer<'a> {
     pub fn read_ascii_octal(&mut self, len: usize) -> Result<usize, ReadError> {
         let bytes = self.read_bytes(len)?;
         let s = str::from_utf8(bytes)?;
