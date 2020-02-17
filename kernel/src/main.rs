@@ -31,13 +31,13 @@ const STACK_SIZE: usize = 16 * PAGE_SIZE;
 
 #[macro_use]
 pub mod arch;
-pub mod init;
+pub mod bootstrap;
 pub mod memory;
 pub mod syscall;
 
 pub unsafe fn main(
     mmap: impl Clone + Iterator<Item = Range<PhysAddr>>,
-    _init_module: Option<&[u8]>,
+    init_module: Option<&[u8]>,
 ) -> ! {
     println!("Loading BrutOS");
     memory::initialize();
@@ -54,39 +54,17 @@ pub unsafe fn main(
     create_idle_task().expect("failed to create idle task");
     create_janitor().expect("failed to create janitor");
 
-    // if let Some(init_module) = init_module {
-    //     match init::run_init(init_module) {
-    //         Ok(()) => unreachable!(),
-    //         Err(e) => panic!("failed to run init: {:?}", e),
-    //     }
-    // } else {
-    //     panic!("nothing to do");
-    // }
-
-    for i in 0..32 {
-        scheduler().as_ref().schedule(
-            Task::new(
-                Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
-                    AddressSpace::kernel(),
-                ))),
-                0,
-                brutos_task::EntryPoint::Kernel(VirtAddr(start_task as usize), i, 0),
-            )
-            .expect("failed to create task"),
-        );
-    }
-    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&AtomicBool::new(true));
-    unreachable!()
-}
-
-extern "C" fn start_task(n: usize) -> ! {
-    unsafe {
-        arch::interrupt::unmask();
-    }
-    let mut i = 0;
-    loop {
-        println!("task {}: {}", n, i);
-        i += 1;
+    if let Some(init_module) = init_module {
+        match bootstrap::create_bootstrap_task(init_module) {
+            Ok(task) => {
+                scheduler().as_ref().schedule(task);
+                <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&AtomicBool::new(true));
+                unreachable!()
+            }
+            Err(e) => panic!("failed to run init: {:?}", e),
+        }
+    } else {
+        panic!("nothing to do");
     }
 }
 
@@ -295,6 +273,11 @@ static mut IDLE_TASK: core::mem::MaybeUninit<Pin<Arc<Task<Cx>, Cx>>> =
     core::mem::MaybeUninit::uninit();
 
 unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
+    let page_tables = AddressSpace::kernel()
+        .vm()
+        .mmu_tables()
+        .lock()
+        .page_tables();
     IDLE_TASK.write(Task::new(
         Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
             AddressSpace::kernel(),
@@ -305,6 +288,7 @@ unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
             arch::idle_task_entry_arg(),
             0,
         ),
+        page_tables,
     )?);
     Ok(())
 }
@@ -339,6 +323,11 @@ static mut JANITOR_TX: Option<mpsc::Sender<JanitorSel, Cx>> = None;
 unsafe fn create_janitor() -> Result<(), OutOfMemory> {
     let (tx, rx) = mpsc::channel()?;
     JANITOR_TX = Some(tx);
+    let page_tables = AddressSpace::kernel()
+        .vm()
+        .mmu_tables()
+        .lock()
+        .page_tables();
     let janitor = Task::new(
         Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
             AddressSpace::kernel(),
@@ -349,6 +338,7 @@ unsafe fn create_janitor() -> Result<(), OutOfMemory> {
             mpsc::Receiver::into_raw(rx) as usize,
             0,
         ),
+        page_tables,
     )?;
     scheduler().as_ref().schedule(janitor);
     Ok(())

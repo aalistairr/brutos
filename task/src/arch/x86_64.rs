@@ -111,6 +111,8 @@ impl Regs {
                 self.rip = entry_point.0 as u64;
                 self.rdi = data as u64;
 
+                self.rflags = 1 << 9; // set IF
+
                 self.gs_base_alt = state as *const _ as usize as u64;
 
                 self.cs = GDT_CODE_USER;
@@ -127,6 +129,7 @@ impl Regs {
 pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) {
     tss_mut().set_rsp0((*to).kernel_stack.0 as u64);
     fence(Ordering::SeqCst);
+    asm!("mov $0, %cr3" :: "r" ((*to).page_tables.0) :: "volatile");
     asm!("
         // Save state
             mov %rax, %gs:0x00
@@ -248,8 +251,8 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
 pub const GDT_NULL: u16 = 0x0;
 pub const GDT_CODE_KERN: u16 = 0x8;
 pub const GDT_DATA_KERN: u16 = 0x10;
-pub const GDT_CODE_USER: u16 = 0x18;
-pub const GDT_DATA_USER: u16 = 0x20;
+pub const GDT_CODE_USER: u16 = 0x18 | 3;
+pub const GDT_DATA_USER: u16 = 0x20 | 3;
 pub const GDT_TSS: u16 = 0x28;
 
 #[repr(C, align(8))]

@@ -166,7 +166,7 @@ where
         unsafe { self.map_unchecked(|x| &x.mappings) }
     }
 
-    fn mmu_tables(self: Pin<&Self>) -> Pin<&Mutex<mmu::Tables, Cx>> {
+    pub fn mmu_tables(self: Pin<&Self>) -> Pin<&Mutex<mmu::Tables, Cx>> {
         unsafe { self.map_unchecked(|x| &x.mmu_tables) }
     }
 

@@ -69,28 +69,28 @@ impl EntryCell {
     }
 
     #[allow(dead_code)]
-    fn load(&self) -> Entry {
+    pub fn load(&self) -> Entry {
         unsafe { Entry(ptr::read_volatile(self.0.get())) }
     }
 
-    fn store(&mut self, entry: Entry) {
+    pub fn store(&mut self, entry: Entry) {
         unsafe { ptr::write_volatile(self.0.get(), entry.0) }
     }
 
     #[allow(dead_code)]
-    fn map<F: FnOnce(Entry) -> Entry>(&mut self, f: F) {
+    pub fn map<F: FnOnce(Entry) -> Entry>(&mut self, f: F) {
         self.store(f(self.load()))
     }
 
-    fn load_nonvolatile(&self) -> Entry {
+    pub fn load_nonvolatile(&self) -> Entry {
         unsafe { Entry(ptr::read(self.0.get())) }
     }
 
-    fn store_nonvolatile(&mut self, entry: Entry) {
+    pub fn store_nonvolatile(&mut self, entry: Entry) {
         unsafe { ptr::write(self.0.get(), entry.0) }
     }
 
-    fn map_nonvolatile<F: FnOnce(Entry) -> Entry>(&mut self, f: F) {
+    pub fn map_nonvolatile<F: FnOnce(Entry) -> Entry>(&mut self, f: F) {
         self.store_nonvolatile(f(self.load_nonvolatile()))
     }
 }
@@ -197,14 +197,19 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
         &mut self,
         lvl: Level,
         addr: VirtAddr,
+        flags: &Flags,
     ) -> Result<(&mut EntryCell, Option<&mut EntryCell>), MapError> {
         fn create_table<Cx: Context>(
             cx: &mut Cx,
             entry_cell: &mut EntryCell,
             parent_entry_cell: Option<&mut EntryCell>,
+            flags: &Flags,
         ) -> Result<Entry, MapError> {
             let (addr, _) = cx.new_table()?;
-            let entry = Entry::new().with_present(true).with_address(addr);
+            let entry = Entry::new()
+                .with_present(true)
+                .with_address(addr)
+                .with_user_accessible(flags.user_accessible);
             entry_cell.store(entry);
             if let Some(parent_entry_cell) = parent_entry_cell {
                 parent_entry_cell.map_nonvolatile(Entry::with_inc_population);
@@ -215,11 +220,12 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             cx: &mut Cx,
             entry_cell: &mut EntryCell,
             parent_entry_cell: Option<&mut EntryCell>,
+            flags: &Flags,
         ) -> Result<&'a mut Table, MapError> {
             let mut entry = entry_cell.load_nonvolatile();
             if !entry.present() {
                 if ALLOC {
-                    entry = create_table(cx, entry_cell, parent_entry_cell)?;
+                    entry = create_table(cx, entry_cell, parent_entry_cell, flags)?;
                 } else {
                     return Err(MapError::NotAllocated);
                 }
@@ -237,7 +243,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             return Ok((self.root, None));
         }
 
-        let pml4 = dig::<_, ALLOC>(self.cx, &mut self.root, None)?;
+        let pml4 = dig::<_, ALLOC>(self.cx, &mut self.root, None, flags)?;
         let pml4e = &mut pml4.0[table_index(Level::Pml4, addr)];
         self.pml4e = pml4e;
         self.valid_lvl = Level::Pml4;
@@ -248,7 +254,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             return Ok((pml4e, Some(self.root)));
         }
 
-        let pdp = dig::<_, ALLOC>(self.cx, pml4e, Some(&mut self.root))?;
+        let pdp = dig::<_, ALLOC>(self.cx, pml4e, Some(&mut self.root), flags)?;
         let pdpe = &mut pdp.0[table_index(Level::Pdp, addr)];
         self.pdpe = pdpe;
         self.valid_lvl = Level::Pdp;
@@ -259,7 +265,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             return Ok((pdpe, Some(pml4e)));
         }
 
-        let pd = dig::<_, ALLOC>(self.cx, pdpe, Some(pml4e))?;
+        let pd = dig::<_, ALLOC>(self.cx, pdpe, Some(pml4e), flags)?;
         let pde = &mut pd.0[table_index(Level::Pd, addr)];
         self.pde = pde;
         self.valid_lvl = Level::Pd;
@@ -270,7 +276,7 @@ impl<'cx, 'root, Cx: Context, const ALLOC: bool, const SKIP_DROP: bool>
             return Ok((pde, Some(pdpe)));
         }
 
-        let pt = dig::<_, ALLOC>(self.cx, pde, Some(pdpe))?;
+        let pt = dig::<_, ALLOC>(self.cx, pde, Some(pdpe), flags)?;
         let pte = &mut pt.0[table_index(Level::Pt, addr)];
         self.pte = pte;
         self.valid_lvl = Level::Pt;
@@ -361,7 +367,7 @@ pub fn map_entry_replace<Cx: Context, const ALLOC: bool>(
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
     let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
-    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr, &flags)?;
 
     let old_entry = entry_cell.load_nonvolatile();
     entry_cell.store(
@@ -402,7 +408,7 @@ pub fn map_entry_keep<Cx: Context, const ALLOC: bool>(
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
     let mut trail = Trail::<_, ALLOC, true>::new(cx, root);
-    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr, &flags)?;
 
     let old_entry = entry_cell.load_nonvolatile();
     if old_entry.present() {
@@ -438,8 +444,9 @@ pub fn unmap_entry<Cx: Context, const ALLOC: bool>(
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
     let mut trail = Trail::<_, ALLOC, false>::new(cx, root);
-    let (entry_cell, parent_entry_cell) =
-        trail.find_entry(lvl, virt_addr).map_err(|e| match e {
+    let (entry_cell, parent_entry_cell) = trail
+        .find_entry(lvl, virt_addr, &Default::default())
+        .map_err(|e| match e {
             MapError::OutOfMemory => unreachable!(),
             MapError::NotAllocated => UnmapError::NotAllocated,
             MapError::Obstructed => UnmapError::Obstructed,
@@ -469,7 +476,7 @@ pub fn get_entry<Cx: Context>(
     assert!(virt_addr.is_aligned(entry_size(lvl)));
 
     let mut trail = Trail::<_, false, false>::new(cx, root);
-    let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
+    let (entry_cell, _) = trail.find_entry(lvl, virt_addr, &Default::default())?;
     let entry = entry_cell.load_nonvolatile();
     if entry.present() {
         Ok(Some(entry))
@@ -492,7 +499,7 @@ pub fn compare_and_swap<Cx: Context>(
     assert!(current.present());
 
     let mut trail = Trail::<_, false, true>::new(cx, root);
-    let (entry_cell, _) = trail.find_entry(lvl, virt_addr)?;
+    let (entry_cell, _) = trail.find_entry(lvl, virt_addr, &flags)?;
 
     let old_entry = entry_cell.load_nonvolatile();
     if old_entry != current {
@@ -521,16 +528,16 @@ pub unsafe fn create_permanent_table<Cx: Context>(
     root: &mut EntryCell,
     virt_addr: VirtAddr,
     lvl: Level,
-) -> Result<(), MapError> {
+    flags: Flags,
+) -> Result<Entry, MapError> {
     assert!(lvl < Level::Root);
     assert!(lvl > Level::Pt);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
     let mut trail = Trail::<_, true, true>::new(cx, root);
-    let (_, parent_entry_cell) = trail.find_entry(lvl.down(), virt_addr)?;
-    parent_entry_cell
-        .unwrap()
-        .map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
-    Ok(())
+    let (_, parent_entry_cell) = trail.find_entry(lvl.down(), virt_addr, &flags)?;
+    let parent_entry_cell = parent_entry_cell.unwrap();
+    parent_entry_cell.map_nonvolatile(|e| e.with_population(Entry::PERMANENT));
+    Ok(parent_entry_cell.load_nonvolatile())
 }
 
 // pub unsafe fn make_nonpermanent<Cx: Context>(
@@ -562,6 +569,7 @@ pub unsafe fn set_entry<Cx: Context>(
     virt_addr: VirtAddr,
     lvl: Level,
     entry: Entry,
+    flags: Flags,
 ) -> Result<(), MapError> {
     assert!(lvl < Level::Root);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
@@ -569,7 +577,7 @@ pub unsafe fn set_entry<Cx: Context>(
         return Ok(());
     }
     let mut trail = Trail::<_, true, false>::new(cx, root);
-    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr)?;
+    let (entry_cell, parent_entry_cell) = trail.find_entry(lvl, virt_addr, &flags)?;
     entry_cell.store(entry);
     parent_entry_cell
         .unwrap()
@@ -586,8 +594,9 @@ pub unsafe fn clear_entry<Cx: Context>(
     assert!(lvl < Level::Root);
     assert!(virt_addr.is_aligned(entry_size(lvl)));
     let mut trail = Trail::<_, false, false>::new(cx, root);
-    let (entry_cell, parent_entry_cell) =
-        trail.find_entry(lvl, virt_addr).map_err(|e| match e {
+    let (entry_cell, parent_entry_cell) = trail
+        .find_entry(lvl, virt_addr, &Default::default())
+        .map_err(|e| match e {
             MapError::OutOfMemory => unreachable!(),
             MapError::NotAllocated => UnmapError::NotAllocated,
             MapError::Obstructed => UnmapError::Obstructed,

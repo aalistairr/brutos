@@ -1,6 +1,7 @@
 #![no_std]
 
 use core::convert::TryInto;
+use core::fmt;
 use core::str::{self, Utf8Error};
 use core::usize;
 
@@ -37,10 +38,25 @@ pub enum Class {
     Class64 = 2,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+#[derive(Copy, Clone, PartialEq, Eq)]
 pub enum ClassUsize {
     Usize32(u32),
     Usize64(u64),
+}
+
+impl fmt::Debug for ClassUsize {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            ClassUsize::Usize32(n) => f
+                .debug_tuple("Usize32")
+                .field(&(*n as usize as *const ()))
+                .finish(),
+            ClassUsize::Usize64(n) => f
+                .debug_tuple("Usize64")
+                .field(&(*n as usize as *const ()))
+                .finish(),
+        }
+    }
 }
 
 impl ClassUsize {
@@ -56,6 +72,20 @@ impl ClassUsize {
             ClassUsize::Usize32(x) if x <= usize::MAX as u32 => Ok(x as usize),
             ClassUsize::Usize64(x) if x <= usize::MAX as u64 => Ok(x as usize),
             _ => Err(Error::Overflow),
+        }
+    }
+
+    pub fn u32(&self) -> Option<u32> {
+        match self {
+            ClassUsize::Usize32(n) => Some(*n),
+            _ => None,
+        }
+    }
+
+    pub fn u64(&self) -> Option<u64> {
+        match self {
+            ClassUsize::Usize64(n) => Some(*n),
+            _ => None,
         }
     }
 }
@@ -161,9 +191,10 @@ impl FileHeader {
     }
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub struct ProgramHeader {
     pub ty: SegmentType,
-    pub flags: u32,
+    pub flags: SegmentFlags,
     pub offset: ClassUsize,
     pub vaddr: ClassUsize,
     pub paddr: ClassUsize,
@@ -185,9 +216,30 @@ pub enum SegmentTypeStandard {
     Tls = 0x7,
 }
 
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
 pub enum SegmentType {
     Standard(SegmentTypeStandard),
     Custom(u32),
+}
+
+impl PartialEq<SegmentTypeStandard> for SegmentType {
+    fn eq(&self, other: &SegmentTypeStandard) -> bool {
+        match self {
+            SegmentType::Standard(ty) => ty == other,
+            SegmentType::Custom(_) => false,
+        }
+    }
+}
+
+bitfield! {
+    #[derive(Copy, Clone, PartialEq, Eq)]
+    pub struct SegmentFlags(u32);
+
+    derive_debug;
+
+    pub field execute: bool = [0];
+    pub field write: bool = [1];
+    pub field read: bool = [2];
 }
 
 impl ProgramHeader {
@@ -230,10 +282,10 @@ impl ProgramHeader {
             filesz,
             memsz,
             align,
-            flags: match class {
+            flags: SegmentFlags(match class {
                 Class::Class32 => flags_32,
                 Class::Class64 => flags_64,
-            },
+            }),
         })
     }
 }
@@ -284,8 +336,10 @@ pub enum SectionFlags {
 macro_rules! section_flags {
     ($name:ident, $t:ty) => {
         bitfield! {
-            #[derive(Copy, Clone, PartialEq, Eq, Debug)]
+            #[derive(Copy, Clone, PartialEq, Eq)]
             pub struct $name($t);
+
+            derive_debug;
 
             #[ro] pub field write: bool = [0];
             #[ro] pub field alloc: bool = [1];
@@ -303,6 +357,32 @@ macro_rules! section_flags {
 
 section_flags!(SectionFlags32, u32);
 section_flags!(SectionFlags64, u64);
+
+macro_rules! sf_indirection {
+    ($($f:ident),*) => {$(
+        impl SectionFlags {
+            pub fn $f(&self) -> bool {
+                match self {
+                    SectionFlags::Flags32(f) => f.$f(),
+                    SectionFlags::Flags64(f) => f.$f(),
+                }
+            }
+        }
+    )*};
+}
+
+sf_indirection!(
+    write,
+    alloc,
+    execinstr,
+    merge,
+    strings,
+    info_link,
+    link_order,
+    os_nonconforming,
+    group,
+    tls
+);
 
 impl SectionHeader {
     fn read(
@@ -375,7 +455,7 @@ pub fn program_header(
 pub fn program_headers<'a>(
     elf: &'a [u8],
     file_header: &'a FileHeader,
-) -> Result<impl 'a + Iterator<Item = Result<ProgramHeader, Error>>, Error> {
+) -> Result<impl 'a + Clone + Iterator<Item = Result<ProgramHeader, Error>>, Error> {
     Ok((0..file_header.phnum as usize).map(move |i| program_header(elf, file_header, i)))
 }
 
@@ -410,7 +490,7 @@ pub fn section_header(
 pub fn section_headers<'a>(
     elf: &'a [u8],
     file_header: &'a FileHeader,
-) -> Result<impl 'a + Iterator<Item = Result<SectionHeader, Error>>, Error> {
+) -> Result<impl 'a + Clone + Iterator<Item = Result<SectionHeader, Error>>, Error> {
     Ok((0..file_header.shnum as usize).map(move |i| section_header(elf, file_header, i)))
 }
 
@@ -435,8 +515,8 @@ pub fn section_name<'a>(
         .ok_or(Error::Overflow)?;
 
     let mut len = 0;
-    for _ in string_start..string_section_end {
-        match elf[string_start] {
+    for i in string_start..string_section_end {
+        match elf[i] {
             0 => break,
             _ => len += 1,
         }

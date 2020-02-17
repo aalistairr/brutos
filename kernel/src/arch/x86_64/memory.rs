@@ -104,14 +104,14 @@ pub unsafe fn create_kernel_mmu_tables() -> Result<mmu::Tables, OutOfMemory> {
             .with_present(true),
     );
     for pml4e_i in 0..256 {
-        KERNEL_PML4[pml4e_i] = mmu::arch::get_entry(
+        KERNEL_PML4[pml4e_i] = mmu::arch::create_permanent_table(
             &mut Cx,
             &mut tables.root,
-            mmu::arch::Level::Pml4,
             KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
+            mmu::arch::Level::Pml4,
+            Default::default(),
         )
-        .expect("failed to create kernel mmu tables")
-        .unwrap_or(mmu::arch::Entry::new());
+        .expect("failed to create kernel mmu tables");
     }
     Ok(tables)
 }
@@ -127,6 +127,7 @@ pub unsafe fn create_user_mmu_tables() -> Result<mmu::Tables, mmu::MapError> {
             KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
             mmu::arch::Level::Pml4,
             KERNEL_PML4[pml4e_i],
+            Default::default(),
         )?;
     }
     Ok(tables)

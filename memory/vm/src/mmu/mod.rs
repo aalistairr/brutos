@@ -127,4 +127,14 @@ impl Tables {
             flags,
         )
     }
+
+    pub fn get_page<Cx: self::arch::Context>(
+        &mut self,
+        cx: &mut Cx,
+        virt_addr: VirtAddr,
+        page_size: PageSize,
+    ) -> Result<Option<PhysAddr>, MapError> {
+        self::arch::get_entry(cx, &mut self.root, page_size.level(), virt_addr)
+            .map(|e| e.and_then(|e| if e.present() { Some(e.address()) } else { None }))
+    }
 }

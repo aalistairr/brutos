@@ -8,7 +8,7 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory};
-use brutos_memory_units::VirtAddr;
+use brutos_memory_units::{PhysAddr, VirtAddr};
 use brutos_sync::spinlock::Spinlock;
 use brutos_util::linked_list::Node;
 use brutos_util::NonSend;
@@ -54,6 +54,7 @@ pub struct State<Cx: Context> {
     kernel_stack: VirtAddr,     // sizeof(regs) + 0x00
     critical_count: usize,      // sizeof(regs) + sizeof(usize)
     task: *const Task<Cx>,      // sizeof(regs) + 2 * sizeof(usize)
+    page_tables: PhysAddr,      // sizeof(regs) + 3 * sizeof(usize)
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
@@ -68,6 +69,7 @@ impl<Cx: Context> Task<Cx> {
         addr_space: Cx::AddrSpace,
         id: usize,
         entry_point: EntryPoint,
+        page_tables: PhysAddr,
     ) -> Result<Pin<Arc<Task<Cx>, Cx>>, OutOfMemory> {
         let kernel_stack = Cx::default().alloc_stack()?;
         let task = Arc::pin(Task {
@@ -80,6 +82,7 @@ impl<Cx: Context> Task<Cx> {
                 kernel_stack,
                 critical_count: 0,
                 task: core::ptr::null(),
+                page_tables,
             }),
             waitq_node: Node::new(),
         })
@@ -130,6 +133,7 @@ impl<Cx: Context> State<Cx> {
             kernel_stack: VirtAddr(0),
             critical_count: 0,
             task: core::ptr::null(),
+            page_tables: PhysAddr(0),
         }
     }
 }

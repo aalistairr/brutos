@@ -1,4 +1,4 @@
-use brutos_memory_units::Order;
+use brutos_memory_units::{Order, PhysAddr};
 
 pub use brutos_platform_pc::mmu::*;
 
@@ -27,5 +27,9 @@ impl Tables {
         Tables {
             root: EntryCell::with_entry(root),
         }
+    }
+
+    pub fn page_tables(&self) -> PhysAddr {
+        self.root.load_nonvolatile().address()
     }
 }
