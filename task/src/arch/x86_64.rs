@@ -111,8 +111,6 @@ impl Regs {
                 self.rip = entry_point.0 as u64;
                 self.rdi = data as u64;
 
-                self.rflags = 1 << 9; // set IF
-
                 self.gs_base_alt = state as *const _ as usize as u64;
 
                 self.cs = GDT_CODE_USER;
@@ -123,6 +121,8 @@ impl Regs {
                 self.gs = GDT_DATA_USER;
             }
         }
+
+        self.rflags = 1 << 9; // set IF
     }
 }
 
