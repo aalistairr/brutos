@@ -414,6 +414,9 @@ impl brutos_task::Context for Cx {
                     *addr_space_guard = TaskAddrSpace::Active(addr_space);
                     true
                 }
+                _ if unsafe { (*task.state.get()).regs.cs == brutos_task::arch::GDT_CODE_KERN } => {
+                    true
+                }
                 _ => false,
             },
             TaskAddrSpace::Active(_) => panic!("task is already active"),
@@ -435,10 +438,6 @@ impl brutos_task::Context for Cx {
             TaskAddrSpace::Active(addr_space) => addr_space.is_alive(),
             TaskAddrSpace::Inactive(_) => false,
         }
-    }
-
-    fn is_task_in_kernel(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool {
-        unsafe { (*task.state.get()).regs.cs == brutos_task::arch::GDT_CODE_KERN }
     }
 
     fn destroy_task(&mut self, task: Pin<Arc<Task<Self>, Self>>) {

@@ -52,10 +52,16 @@ impl<Cx: Context> Scheduler<Cx> {
         );
         let mut cx = Cx::default();
         let next_task = loop {
-            match self.waiting().lock().as_mut().pop_front() {
-                None => break cx.idle_task().clone(),
-                Some(task) if cx.activate_task(&task) || cx.is_task_in_kernel(&task) => break task,
-                Some(task) => cx.destroy_task(task),
+            let task = self
+                .waiting()
+                .lock()
+                .as_mut()
+                .pop_front()
+                .unwrap_or_else(|| cx.idle_task().clone());
+            if cx.activate_task(&task) {
+                break task;
+            } else {
+                cx.destroy_task(task);
             }
         };
         let next_state = next_task.state.get();

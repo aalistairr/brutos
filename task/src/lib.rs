@@ -29,8 +29,6 @@ pub trait Context: Default + AllocOne<ArcInner<Task<Self>>> + brutos_sync::Criti
     fn deactivate_task(&mut self, task: &Pin<Arc<Task<Self>, Self>>);
     #[must_use]
     fn is_task_active(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool;
-    #[must_use]
-    fn is_task_in_kernel(&mut self, task: &Pin<Arc<Task<Self>, Self>>) -> bool;
     fn destroy_task(&mut self, task: Pin<Arc<Task<Self>, Self>>);
 }
 
