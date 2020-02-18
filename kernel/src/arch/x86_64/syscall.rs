@@ -60,6 +60,7 @@ pub unsafe fn syscall_entry() {
 
 global_asm!(
     "
+.section .text
 .global syscall_return
 .global syscall_unswapped_gs_postfix_start
 .global syscall_unswapped_gs_postfix_end
