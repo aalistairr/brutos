@@ -130,7 +130,6 @@ impl Screen {
             self.x = 0;
             self.y += 1;
             if self.y >= FB_HEIGHT {
-                self.y = 0;
                 self.scroll();
             }
         }
@@ -143,6 +142,17 @@ impl Screen {
                     let c = ptr::read((*self.framebuffer)[y + 1][x].get());
                     ptr::write_volatile((*self.framebuffer)[y][x].get(), c);
                 }
+            }
+        }
+        for x in 0..FB_WIDTH {
+            unsafe {
+                ptr::write_volatile(
+                    (*self.framebuffer)[FB_HEIGHT - 1][x].get(),
+                    Character {
+                        value: ' ' as u8,
+                        style: self.style,
+                    },
+                );
             }
         }
         self.y = FB_HEIGHT - 1;
