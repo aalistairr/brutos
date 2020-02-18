@@ -2752,13 +2752,13 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %r10
         push %r11
 
-        lea 0x48(%rsp), %rsi
-        cmpq $$8, %rsi
+        cmpq $$8, 0x50(%rsp)
         je 1f
         swapgs
     1:
     interrupt_entry_unswapped_gs_prefix_end:
 
+        lea 0x48(%rsp), %rsi
         call *%rax
         cli
 
