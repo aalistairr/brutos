@@ -2,11 +2,19 @@ use brutos_platform_pc::msr;
 use brutos_syscall as sc;
 
 pub unsafe fn initialize() {
+    assert_eq!(
+        brutos_task::arch::GDT_CODE_KERN + 8,
+        brutos_task::arch::GDT_DATA_KERN
+    );
+    assert_eq!(
+        brutos_task::arch::GDT_CODE_USER - 8,
+        brutos_task::arch::GDT_DATA_USER
+    );
     msr::map::<msr::Ia32Efer, _>(|efer| efer.with_syscall_enabled(true));
     msr::write::<msr::Ia32Star>(
         msr::Star::new()
             .with_kernel_selector(brutos_task::arch::GDT_CODE_KERN)
-            .with_user_selector(brutos_task::arch::GDT_CODE_USER),
+            .with_user_selector(brutos_task::arch::GDT_CODE_USER - 16),
     );
     msr::write::<msr::Ia32LStar>(syscall_entry as u64);
     msr::write::<msr::Ia32FMask>(!0);

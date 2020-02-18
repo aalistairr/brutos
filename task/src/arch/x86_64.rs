@@ -251,8 +251,8 @@ pub unsafe fn switch<Cx: Context>(switch_lock: &AtomicBool, to: *mut State<Cx>) 
 pub const GDT_NULL: u16 = 0x0;
 pub const GDT_CODE_KERN: u16 = 0x8;
 pub const GDT_DATA_KERN: u16 = 0x10;
-pub const GDT_CODE_USER: u16 = 0x18 | 3;
-pub const GDT_DATA_USER: u16 = 0x20 | 3;
+pub const GDT_DATA_USER: u16 = 0x18 | 3;
+pub const GDT_CODE_USER: u16 = 0x20 | 3;
 pub const GDT_TSS: u16 = 0x28;
 
 #[repr(C, align(8))]
@@ -260,8 +260,8 @@ pub struct Gdt {
     null: u64,
     code_kern: gdt::CDDescriptor,
     data_kern: gdt::CDDescriptor,
-    code_user: gdt::CDDescriptor,
     data_user: gdt::CDDescriptor,
+    code_user: gdt::CDDescriptor,
     tss: tss::Descriptor,
 }
 
@@ -276,11 +276,11 @@ unsafe fn gdt_mut() -> Pin<&'static mut Gdt> {
             .with_present(true)
             .with_long(true)
             .with_dpl(0),
-        code_user: gdt::CDDescriptor::new(gdt::CDType::Code)
+        data_user: gdt::CDDescriptor::new(gdt::CDType::Data)
             .with_present(true)
             .with_long(true)
             .with_dpl(3),
-        data_user: gdt::CDDescriptor::new(gdt::CDType::Data)
+        code_user: gdt::CDDescriptor::new(gdt::CDType::Code)
             .with_present(true)
             .with_long(true)
             .with_dpl(3),
