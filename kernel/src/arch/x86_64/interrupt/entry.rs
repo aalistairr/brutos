@@ -2752,6 +2752,9 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         push %r10
         push %r11
 
+        testq $$(1<<9), 0x58(%rsp)
+        jz halt
+
         cmpq $$8, 0x50(%rsp)
         je 1f
         swapgs
@@ -2841,6 +2844,12 @@ pub unsafe extern "C" fn interrupt_entry_functions() {
         pop %rdx
 
         iretq
+
+
+    halt:
+        cli
+        hlt
+        jmp halt
     " :::: "volatile");
 }
 

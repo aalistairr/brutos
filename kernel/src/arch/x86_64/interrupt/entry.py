@@ -155,6 +155,9 @@ i(f'push %r10')  # +0x08
 i(f'push %r11')  # +0x00
 # --- (aligned to 0x10)
 n()
+i(f'testq $$(1<<9), 0x58(%rsp)')  # halt if IF is not set
+i(f'jz halt')
+n()
 i(f'cmpq $${GDT_CODE_KERN}, 0x50(%rsp)')
 i(f'je 1f')
 i(f'swapgs')
@@ -254,6 +257,12 @@ i(f'pop %rdi')
 i(f'pop %rdx')
 n()
 i(f'iretq')
+n()
+n()
+l(f'halt:')
+i(f'cli')
+i(f'hlt')
+i(f'jmp halt')
 
 emit()
 
