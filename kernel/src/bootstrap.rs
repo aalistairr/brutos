@@ -14,7 +14,8 @@ use brutos_sync::spinlock::Spinlock;
 use brutos_task::{self as task, Task};
 use brutos_util::UInt;
 
-use crate::{create_user_address_space, AddressSpace, Cx};
+use crate::memory::{create_user_address_space, AddressSpace};
+use crate::Cx;
 
 #[derive(Clone, Debug)]
 pub enum Error {
@@ -73,7 +74,7 @@ pub unsafe fn create_bootstrap_task(cpio_module: &[u8]) -> Result<Pin<Arc<Task<C
     let entry = load_bootstrap(addr_space, bootstrap).expect("failed to load bootstrap");
     let page_tables = addr_space.vm().mmu_tables().lock().page_tables();
     Ok(Task::new(
-        Spinlock::new(crate::TaskAddrSpace::Inactive(Arc::pin_downgrade(
+        Spinlock::new(crate::task::TaskAddrSpace::Inactive(Arc::pin_downgrade(
             addr_space,
         ))),
         0,

@@ -59,7 +59,7 @@ alias! { kill:
 unsafe fn check_task() {
     if !brutos_task::Context::is_task_active(&mut Cx::default(), &*brutos_task::Task::current()) {
         <Cx as brutos_sync::Critical>::enter_critical();
-        crate::destroy_task(crate::scheduler().deschedule());
+        crate::task::destroy_task(crate::task::scheduler().deschedule());
         <Cx as brutos_sync::waitq::Context>::unlock_and_yield(
             &core::sync::atomic::AtomicBool::new(true),
         );
@@ -89,7 +89,7 @@ fn panic(vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
 
 unsafe fn kill_addr_space() {
     match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
-        crate::TaskAddrSpace::Active(addr_space) => addr_space.kill(),
+        crate::task::TaskAddrSpace::Active(addr_space) => addr_space.kill(),
         _ => unreachable!(),
     }
 }
@@ -140,7 +140,7 @@ fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
         crate::arch::interrupt::unmask();
     }
     let addr_space = match &*brutos_task::Task::<Cx>::current().addr_space.lock() {
-        crate::TaskAddrSpace::Active(addr_space) => addr_space.clone(),
+        crate::task::TaskAddrSpace::Active(addr_space) => addr_space.clone(),
         _ => unreachable!(),
     };
     let error = PageFaultErrorCode(error);
@@ -167,7 +167,7 @@ fn timer(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
         panic!("timer interrupt in critical section");
     }
     unsafe {
-        crate::yieldd();
+        crate::task::yieldd();
     }
 }
 

@@ -9,8 +9,8 @@ use brutos_memory_traits::AllocPhysPage;
 use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 use brutos_memory_vm::{self as vm, mmu};
 
-use crate::memory::{CutRange, FailedToBootstrap};
-use crate::{AddressSpace, Cx};
+use crate::memory::{AddressSpace, CutRange, FailedToBootstrap};
+use crate::Cx;
 
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
 pub const PHYS_IDENT_SIZE: usize = 0x0000008000000000;
