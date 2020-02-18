@@ -1,4 +1,4 @@
-#![feature(asm, global_asm, naked_functions)]
+#![feature(asm, global_asm, naked_functions, core_intrinsics)]
 #![feature(
     const_raw_ptr_deref,
     const_mut_refs,

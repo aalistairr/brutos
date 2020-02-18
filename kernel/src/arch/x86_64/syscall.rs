@@ -2,6 +2,7 @@ use brutos_platform_pc::msr;
 use brutos_syscall as sc;
 
 pub unsafe fn initialize() {
+    msr::map::<msr::Ia32Efer, _>(|efer| efer.with_syscall_enabled(true));
     msr::write::<msr::Ia32Star>(
         msr::Star::new()
             .with_kernel_selector(brutos_task::arch::GDT_CODE_KERN)
@@ -47,8 +48,8 @@ pub unsafe fn syscall_entry() {
         mov %gs:0xb8, %rsp
         sti
 
-        sub $$0x8, %rsp
         push %rax
+        push %rbp
         push %rcx
         push %r11
 
@@ -57,30 +58,50 @@ pub unsafe fn syscall_entry() {
     " :::: "volatile");
 }
 
-pub unsafe fn syscall_return(
-    ret0: usize,
-    ret1: usize,
-    ret2: usize,
-    ret3: usize,
-    ret4: usize,
-    ret5: usize,
-    ret6: usize,
-) -> ! {
-    asm!("
-    .global syscall_unswapped_gs_postfix_start
-    .global syscall_unswapped_gs_postfix_end
-        pop %r11
-        pop %rcx
-        pop %r10
+global_asm!(
+    "
+.global syscall_return
+.global syscall_unswapped_gs_postfix_start
+.global syscall_unswapped_gs_postfix_end
+syscall_return:
+    cli
 
-        cli
-        mov %r10, %rsp
-    syscall_unswapped_gs_postfix_start:
-        swapgs
-        sysret
-    syscall_unswapped_gs_postfix_end:
-    " :: "{rax}" (ret0), "{rdi}" (ret1), "{rsi}" (ret2), "{rdx}" (ret3), "{r10}" (ret4), "{r8}" (ret5), "{r9}" (ret6) : "memory" : "volatile");
-    unreachable!();
+    mov %rcx, %r10
+
+    add $8, %rsp
+    pop %r11
+    pop %rcx
+    pop %rbp
+    pop %rsp
+
+    mov $0, %rax
+    mov $0, %rbx
+    mov $0, %r12
+    mov $0, %r13
+    mov $0, %r14
+    mov $0, %r15
+    mov $0, %rbp
+
+syscall_unswapped_gs_postfix_start:
+    swapgs
+    sysretq
+syscall_unswapped_gs_postfix_end:
+"
+);
+
+extern "C" {
+    fn syscall_return(
+        r1: usize,
+        r2: usize,
+        r3: usize,
+        r4: usize,
+        r5: usize,
+        r6: usize,
+        r11: usize,
+        rcx: usize,
+        rbp: usize,
+        rsp: usize,
+    ) -> !;
 }
 
 #[no_mangle]
@@ -91,9 +112,13 @@ pub unsafe extern "C" fn syscall_entry_rust(
     arg4: usize,
     arg5: usize,
     arg6: usize,
+    r11: usize,
+    rcx: usize,
+    rbp: usize,
+    rsp: usize,
 ) -> ! {
-    let (r0, r1, r2, r3, r4, r5, r6) = handle_syscall(arg1, arg2, arg3, arg4, arg5, arg6);
-    syscall_return(r0, r1, r2, r3, r4, r5, r6);
+    let (r1, r2, r3, r4, r5, r6) = handle_syscall(arg1, arg2, arg3, arg4, arg5, arg6);
+    syscall_return(r1, r2, r3, r4, r5, r6, r11, rcx, rbp, rsp);
 }
 
 pub fn handle_syscall(
@@ -103,12 +128,12 @@ pub fn handle_syscall(
     _arg4: usize,
     _arg5: usize,
     _arg6: usize,
-) -> (usize, usize, usize, usize, usize, usize, usize) {
-    let r0;
-    let (r1, r2, r3, r4, r5, r6) = (0, 0, 0, 0, 0, 0);
+) -> (usize, usize, usize, usize, usize, usize) {
+    let r1;
+    let (r2, r3, r4, r5, r6) = (0, 0, 0, 0, 0);
     match arg1 {
-        sc::DEBUG_PRINT_CHAR => r0 = crate::syscall::debug_print_char(arg2),
-        _ => r0 = !0,
+        sc::DEBUG_PRINT_CHAR => r1 = crate::syscall::debug_print_char(arg2),
+        _ => r1 = !0,
     }
-    (r0, r1, r2, r3, r4, r5, r6)
+    (r1, r2, r3, r4, r5, r6)
 }
