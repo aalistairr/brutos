@@ -3,6 +3,7 @@ use core::{i16, isize};
 
 use bitbash::ConvertRepr;
 
+use crate::arch::Rets;
 use crate::Object;
 
 pub trait Convert<T>: Sized {
@@ -32,6 +33,16 @@ macro_rules! Error_output_enum {
 #[allow(dead_code)]
 pub const GENERAL_ERROR_END: isize = i16::MIN as isize;
 Error_output_enum!(GeneralError {});
+
+impl Into<Rets> for GeneralError {
+    fn into(self) -> Rets {
+        let r: Result<(), Self> = Err(self);
+        match r.convert_into() {
+            Some(r) => r,
+            None => unreachable!(),
+        }
+    }
+}
 
 macro_rules! Error {
     ($name:ident { $($variant:ident,)* }) => { Error_assign!(crate::sugar::GENERAL_ERROR_END; $name { $($variant,)* } => {}); };

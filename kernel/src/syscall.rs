@@ -1,6 +1,7 @@
 use core::char;
 
 use brutos_syscall as sc;
+use brutos_syscall::GeneralError;
 
 macro_rules! handle {
     ($($path:path => $f:ident,)*) => {
@@ -9,21 +10,15 @@ macro_rules! handle {
             match number {
                 $(
                     <$path>::NUMBER => {
-                        let arg: <$path as Syscall>::Arg = match <_>::convert_from(args) {
+                        let arg = match <<$path as brutos_syscall::Syscall>::Arg>::convert_from(args) {
                             Some(arg) => arg,
-                            None => {
-                                let e: Result<(), sc::GeneralError> = Err(sc::GeneralError::InvalidParameters);
-                                return e.convert_into().expect("syscall: invalid ret");
-                            }
+                            None => return GeneralError::InvalidParameters.into(),
                         };
                         let ret: <$path as Syscall>::Ret = $f(arg);
                         ret.convert_into().expect("syscall: invalid ret")
                     }
                 )*
-                _ => {
-                    let e: Result<(), sc::GeneralError> = Err(sc::GeneralError::UnknownSyscall);
-                    e.convert_into().expect("syscall: invalid ret")
-                }
+                _ => return GeneralError::UnknownSyscall.into(),
             }
         }
     };
