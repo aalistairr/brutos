@@ -55,13 +55,14 @@ macro_rules! Error_assign {
 }
 
 macro_rules! Syscall {
-    ([$number:expr] $name:ident ($arg:ty) -> $ret:ty) => {
+    ([$number:expr] $name:ident ($arg:ty) -> Result<$ret_ok:ty, $ret_err:ty>) => {
         pub enum $name {}
         impl crate::Syscall for $name {
             const NUMBER: usize = $number;
 
             type Arg = $arg;
-            type Ret = $ret;
+            type RetOk = $ret_ok;
+            type RetErr = $ret_err;
         }
     };
 }

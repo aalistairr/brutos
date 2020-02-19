@@ -14,7 +14,7 @@ macro_rules! handle {
                             Some(arg) => arg,
                             None => return GeneralError::InvalidParameters.into(),
                         };
-                        let ret: <$path as Syscall>::Ret = $f(arg);
+                        let ret: Result<<$path as Syscall>::RetOk, <$path as Syscall>::RetErr> = $f(arg);
                         ret.convert_into().expect("syscall: invalid ret")
                     }
                 )*

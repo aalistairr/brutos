@@ -60,15 +60,20 @@ pub mod debug {
 pub trait Syscall {
     const NUMBER: usize;
 
-    type Arg: Convert<arch::Args>;
-    type Ret: Convert<arch::Rets>;
+    type Arg;
+    type RetOk;
+    type RetErr: Error;
 }
 
 #[derive(Copy, Clone, PartialEq, Eq, Debug)]
 #[repr(transparent)]
 pub struct Object(pub usize);
 
-pub unsafe fn syscall<S: Syscall>(arg: S::Arg) -> S::Ret {
+pub unsafe fn syscall<S: Syscall>(arg: S::Arg) -> Result<S::RetOk, S::RetErr>
+where
+    S::Arg: Convert<arch::Args>,
+    Result<S::RetOk, S::RetErr>: Convert<arch::Rets>,
+{
     let rets = arch::perform_syscall(S::NUMBER, arg.convert_into().expect("syscall: invalid arg"));
-    S::Ret::convert_from(rets).expect("syscall: invalid rets")
+    <_>::convert_from(rets).expect("syscall: invalid rets")
 }
