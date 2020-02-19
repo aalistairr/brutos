@@ -14,10 +14,16 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 #[naked]
 unsafe fn _start() {
     asm!("
+    0:
+        mov $$0, %r12
     1:
         mov $$0xfffffffffffff000, %rdi
         mov $$0x41, %rsi
+        add %r12, %rsi
         syscall
-        jmp 1b
+        inc %r12
+        cmp $$25, %r12
+        jne 1b
+        jmp 0b
     " :::: "volatile");
 }
