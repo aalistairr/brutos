@@ -1,4 +1,3 @@
-use core::convert::TryFrom;
 use core::{i16, isize};
 
 use bitbash::ConvertRepr;
@@ -67,15 +66,9 @@ macro_rules! Syscall {
     };
 }
 
-impl TryFrom<usize> for Object {
-    type Error = ();
-
-    fn try_from(x: usize) -> Result<Object, ()> {
-        if x <= isize::MAX as usize {
-            Ok(Object(x))
-        } else {
-            Err(())
-        }
+impl From<usize> for Object {
+    fn from(x: usize) -> Object {
+        Object(x)
     }
 }
 
@@ -103,11 +96,9 @@ macro_rules! Handle {
             }
         }
 
-        impl core::convert::TryFrom<usize> for Handle {
-            type Error = ();
-
-            fn try_from(x: usize) -> Result<Handle, ()> {
-                Ok(Handle(core::convert::TryInto::try_into(x)?))
+        impl From<usize> for Handle {
+            fn from(x: usize) -> Handle {
+                Handle(crate::Object(x))
             }
         }
 

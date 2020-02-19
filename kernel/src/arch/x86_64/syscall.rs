@@ -24,12 +24,12 @@ pub unsafe fn initialize() {
 //   %rcx       return RIP      (                 clobbered in ABI)
 //   %r11       return RFLAGS   (                 clobbered in ABI)
 //
-//   %rdi       arg 1           (enforced by ABI, clobbered)
-//   %rsi       arg 2           (enforced by ABI, clobbered)
-//   %rdx       arg 3           (enforced by ABI, clobbered)
-//   %r10       arg 4           (                 clobbered, %rcx is arg 4 in ABI)
-//   %r8        arg 5           (enforced by ABI, clobbered)
-//   %r9        arg 6           (enforced by ABI, clobbered)
+//   %rdi       syscall number  (enforced by ABI, clobbered)
+//   %rsi       arg 1           (enforced by ABI, clobbered)
+//   %rdx       arg 2           (enforced by ABI, clobbered)
+//   %r10       arg 3           (                 clobbered, %rcx is arg 4 in ABI)
+//   %r8        arg 4           (enforced by ABI, clobbered)
+//   %r9        arg 5           (enforced by ABI, clobbered)
 //
 //   %rbx       saved           (enforced by ABI)
 //   %rbp       saved           (enforced by ABI)
@@ -39,16 +39,16 @@ pub unsafe fn initialize() {
 //   %r14       saved           (enforced by ABI)
 //   %r15       saved           (enforced by ABI)
 //
-//   %rax       return value    (enforced in ABI)
+//   %rax       return value    (enforced by ABI)
 
 #[no_mangle]
 #[naked]
 pub unsafe fn syscall_entry() {
-    // %rcx contains the return RIP
-    // %r11 contains the return RFLAGS
     asm!("
     .global syscall_unswapped_gs_prefix_start
     .global syscall_unswapped_gs_prefix_end
+    .global syscall_unswapped_gs_postfix_start
+    .global syscall_unswapped_gs_postfix_end
     syscall_unswapped_gs_prefix_start:
         swapgs
     syscall_unswapped_gs_prefix_end:
@@ -56,61 +56,25 @@ pub unsafe fn syscall_entry() {
         mov %gs:0xb8, %rsp
         sti
 
-        push %rax
-        push %rbp
+        push %rax       // RSP
         push %rcx
         push %r11
+        sub $$0x8, %rsp // align stack
 
         mov %r10, %rcx
         call syscall_entry_rust
+        cli
+
+        add $$0x8, %rsp // dealign stack
+        pop %r11
+        pop %rcx
+        pop %rsp
+
+    syscall_unswapped_gs_postfix_start:
+        swapgs
+        sysretq
+    syscall_unswapped_gs_postfix_end:
     " :::: "volatile");
-}
-
-global_asm!(
-    "
-.section .text
-.global syscall_return
-.global syscall_unswapped_gs_postfix_start
-.global syscall_unswapped_gs_postfix_end
-syscall_return:
-    cli
-
-    mov %rcx, %r10
-
-    add $8, %rsp
-    pop %r11
-    pop %rcx
-    pop %rbp
-    pop %rsp
-
-    mov $0, %rax
-    mov $0, %rbx
-    mov $0, %r12
-    mov $0, %r13
-    mov $0, %r14
-    mov $0, %r15
-    mov $0, %rbp
-
-syscall_unswapped_gs_postfix_start:
-    swapgs
-    sysretq
-syscall_unswapped_gs_postfix_end:
-"
-);
-
-extern "C" {
-    fn syscall_return(
-        r1: usize,
-        r2: usize,
-        r3: usize,
-        r4: usize,
-        r5: usize,
-        r6: usize,
-        r11: usize,
-        rcx: usize,
-        rbp: usize,
-        rsp: usize,
-    ) -> !;
 }
 
 #[no_mangle]
@@ -121,12 +85,8 @@ pub unsafe extern "C" fn syscall_entry_rust(
     arg3: usize,
     arg4: usize,
     arg5: usize,
-    r11: usize,
-    rcx: usize,
-    rbp: usize,
-    rsp: usize,
-) -> ! {
+) -> isize {
     let args = Args(arg1, arg2, arg3, arg4, arg5);
-    let Rets(r1, r2, r3, r4, r5, r6) = crate::syscall::handle(number, args);
-    syscall_return(r1 as usize, r2, r3, r4, r5, r6, r11, rcx, rbp, rsp);
+    let Rets(r1) = crate::syscall::handle(number, args);
+    r1
 }
