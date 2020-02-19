@@ -23,8 +23,6 @@ pub mod addr_space {
 
         use brutos_memory_units::VirtAddr;
 
-        Handle!();
-
         Syscall!([0x1100] Create(CreateArgs) -> Result<VirtAddr, CreateError>);
         pub struct CreateArgs {
             pub addr_space: addr_space::Handle,
