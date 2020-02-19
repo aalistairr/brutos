@@ -15,7 +15,7 @@ fn panic(_info: &core::panic::PanicInfo) -> ! {
 unsafe fn _start() {
     asm!("
     1:
-        mov $$0x500, %rdi
+        mov $$0xfffffffffffff000, %rdi
         mov $$0x41, %rsi
         syscall
         jmp 1b

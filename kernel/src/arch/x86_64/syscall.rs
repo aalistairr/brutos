@@ -1,5 +1,5 @@
 use brutos_platform_pc::msr;
-use brutos_syscall as sc;
+use brutos_syscall::arch::{Args, Rets};
 
 pub unsafe fn initialize() {
     assert_eq!(
@@ -115,34 +115,18 @@ extern "C" {
 
 #[no_mangle]
 pub unsafe extern "C" fn syscall_entry_rust(
+    number: usize,
     arg1: usize,
     arg2: usize,
     arg3: usize,
     arg4: usize,
     arg5: usize,
-    arg6: usize,
     r11: usize,
     rcx: usize,
     rbp: usize,
     rsp: usize,
 ) -> ! {
-    let (r1, r2, r3, r4, r5, r6) = handle_syscall(arg1, arg2, arg3, arg4, arg5, arg6);
-    syscall_return(r1, r2, r3, r4, r5, r6, r11, rcx, rbp, rsp);
-}
-
-pub fn handle_syscall(
-    arg1: usize,
-    arg2: usize,
-    _arg3: usize,
-    _arg4: usize,
-    _arg5: usize,
-    _arg6: usize,
-) -> (usize, usize, usize, usize, usize, usize) {
-    let r1;
-    let (r2, r3, r4, r5, r6) = (0, 0, 0, 0, 0);
-    match arg1 {
-        sc::DEBUG_PRINT_CHAR => r1 = crate::syscall::debug_print_char(arg2),
-        _ => r1 = !0,
-    }
-    (r1, r2, r3, r4, r5, r6)
+    let args = Args(arg1, arg2, arg3, arg4, arg5);
+    let Rets(r1, r2, r3, r4, r5, r6) = crate::syscall::handle(number, args);
+    syscall_return(r1 as usize, r2, r3, r4, r5, r6, r11, rcx, rbp, rsp);
 }
