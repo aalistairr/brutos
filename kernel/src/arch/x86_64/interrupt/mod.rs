@@ -57,7 +57,11 @@ alias! { kill:
 }
 
 unsafe fn check_task() {
-    if !brutos_task::Context::is_task_active(&mut Cx::default(), &*brutos_task::Task::current()) {
+    brutos_task::arch::current_task_inc_critical_count();
+    let is_task_active =
+        brutos_task::Context::is_task_active(&mut Cx::default(), &*brutos_task::Task::current());
+    brutos_task::arch::current_task_dec_critical_count();
+    if !is_task_active {
         <Cx as brutos_sync::Critical>::enter_critical();
         crate::task::destroy_task(crate::task::scheduler().deschedule());
         <Cx as brutos_sync::waitq::Context>::unlock_and_yield(
@@ -167,7 +171,9 @@ fn timer(_vector: usize, _stack_frame: &InterruptStackFrame, _error: usize) {
         panic!("timer interrupt in critical section");
     }
     unsafe {
+        brutos_task::arch::current_task_inc_critical_count();
         crate::task::yieldd();
+        brutos_task::arch::current_task_dec_critical_count();
     }
 }
 

@@ -30,6 +30,7 @@ pub unsafe fn main(
     mmap: impl Clone + Iterator<Item = Range<PhysAddr>>,
     init_module: Option<&[u8]>,
 ) -> ! {
+    <Cx as brutos_sync::Critical>::enter_critical();
     println!("Loading BrutOS");
     memory::initialize();
     memory::initialize_task_allocator();
