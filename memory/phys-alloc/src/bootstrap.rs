@@ -205,6 +205,48 @@ fn alloc_in_regions<T>(regions: &mut [Region<T>], size: usize, align: usize) -> 
     )
 }
 
+#[derive(Clone)]
+pub struct CutRange<I> {
+    cut: Range<PhysAddr>,
+    iter: I,
+    range: Option<Range<PhysAddr>>,
+}
+
+impl<I> CutRange<I> {
+    pub fn new(iter: I, cut: Range<PhysAddr>) -> CutRange<I> {
+        CutRange {
+            iter,
+            cut,
+            range: None,
+        }
+    }
+}
+
+impl<I: Iterator<Item = Range<PhysAddr>>> Iterator for CutRange<I> {
+    type Item = Range<PhysAddr>;
+
+    fn next(&mut self) -> Option<Range<PhysAddr>> {
+        loop {
+            let range = match self.range.take().or_else(|| self.iter.next()) {
+                Some(x) => x,
+                None => return None,
+            };
+            if range.end <= self.cut.start || range.start >= self.cut.end {
+                return Some(range);
+            } else if range.start < self.cut.start && range.end <= self.cut.end {
+                return Some(range.start..self.cut.start);
+            } else if range.start >= self.cut.start && range.end > self.cut.end {
+                return Some(self.cut.end..range.end);
+            } else if range.start < self.cut.start && range.end > self.cut.end {
+                self.range = Some(self.cut.end..range.end);
+                return Some(range.start..self.cut.start);
+            } else {
+                continue;
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::ops::Range;

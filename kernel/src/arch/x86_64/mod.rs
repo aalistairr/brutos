@@ -2,6 +2,7 @@ use core::pin::Pin;
 use core::slice;
 
 use brutos_alloc::OutOfMemory;
+use brutos_memory_phys_alloc::bootstrap::CutRange;
 use brutos_memory_traits::AllocPhysPage;
 use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 use brutos_memory_vm as vm;
@@ -11,7 +12,6 @@ use brutos_platform_pc as pc;
 use brutos_sync::mutex::Mutex;
 use brutos_task as task;
 
-use crate::memory::alloc::CutRange;
 use crate::Cx;
 
 #[macro_export]

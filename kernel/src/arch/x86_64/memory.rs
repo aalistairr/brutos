@@ -4,13 +4,13 @@ use core::pin::Pin;
 use core::ptr::NonNull;
 
 use brutos_alloc::{Arc, OutOfMemory};
-use brutos_memory_phys_alloc::bootstrap;
+use brutos_memory_phys_alloc::bootstrap::{self, CutRange};
 use brutos_memory_traits::AllocPhysPage;
 use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 use brutos_memory_vm::{self as vm, mmu};
 
 use crate::memory::addr_space::AddressSpace;
-use crate::memory::alloc::{CutRange, FailedToBootstrap};
+use crate::memory::alloc::FailedToBootstrap;
 use crate::Cx;
 
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
