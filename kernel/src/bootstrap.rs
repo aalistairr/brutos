@@ -14,7 +14,7 @@ use brutos_sync::spinlock::Spinlock;
 use brutos_task::{self as task, Task};
 use brutos_util::UInt;
 
-use crate::memory::{create_user_address_space, AddressSpace};
+use crate::memory::addr_space::{create_user_address_space, AddressSpace};
 use crate::Cx;
 
 #[derive(Clone, Debug)]

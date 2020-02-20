@@ -32,14 +32,13 @@ pub unsafe fn main(
 ) -> ! {
     <Cx as brutos_sync::Critical>::enter_critical();
     println!("Loading BrutOS");
-    memory::initialize();
-    memory::initialize_task_allocator();
-    memory::initialize_mapping_allocator();
-    memory::initialize_addr_space_allocator();
+    memory::alloc::initialize();
     task::initialize_scheduler();
-    let available_memory = memory::bootstrap(mmap).expect("Failed to bootstrap physical memory");
+    let available_memory =
+        memory::alloc::bootstrap(mmap).expect("Failed to bootstrap physical memory");
     println!("{} bytes available", available_memory);
-    memory::create_kernel_address_space().expect("failed to create kernel address space");
+    memory::addr_space::create_kernel_address_space()
+        .expect("failed to create kernel address space");
 
     arch::initialize_with_address_space();
 

@@ -10,7 +10,7 @@ use brutos_sync::mpsc;
 use brutos_sync::spinlock::{Spinlock, SpinlockGuard};
 use brutos_task::{sched, Task};
 
-use crate::memory::AddressSpace;
+use crate::memory::addr_space::AddressSpace;
 use crate::Cx;
 
 unsafe impl brutos_sync::Critical for Cx {

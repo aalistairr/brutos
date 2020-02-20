@@ -11,7 +11,7 @@ use brutos_platform_pc as pc;
 use brutos_sync::mutex::Mutex;
 use brutos_task as task;
 
-use crate::memory::CutRange;
+use crate::memory::alloc::CutRange;
 use crate::Cx;
 
 #[macro_export]

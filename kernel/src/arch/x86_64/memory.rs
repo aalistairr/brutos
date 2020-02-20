@@ -9,7 +9,8 @@ use brutos_memory_traits::AllocPhysPage;
 use brutos_memory_units::{Order, PhysAddr, VirtAddr};
 use brutos_memory_vm::{self as vm, mmu};
 
-use crate::memory::{AddressSpace, CutRange, FailedToBootstrap};
+use crate::memory::addr_space::AddressSpace;
+use crate::memory::alloc::{CutRange, FailedToBootstrap};
 use crate::Cx;
 
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
@@ -148,13 +149,8 @@ static mut SHARED_ORDER9_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPag
     MaybeUninit::uninit();
 
 pub fn initialize() {
-    const FAILED: &str = "failed to allocate shared empty page";
-    let order9 = crate::memory::phys_allocator()
-        .lock()
-        .as_mut()
-        .allocate(Order(9))
-        .expect(FAILED)
-        .expect(FAILED);
+    let order9 =
+        <Cx as AllocPhysPage>::alloc(Order(9)).expect("failed to allocate shared empty page");
     order9.1.as_ref().inc();
     unsafe {
         SHARED_ORDER9_EMPTY_PAGE.write(order9);
