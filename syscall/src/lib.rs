@@ -19,7 +19,7 @@ pub mod addr_space {
     pub mod mapping {
         use crate::addr_space;
 
-        use bitbash::bitfield;
+        use bitbash::bitfield_nonconst as bitfield;
 
         use brutos_memory_units::VirtAddr;
 

@@ -14,7 +14,7 @@ pub trait Error: ConvertRepr {}
 
 macro_rules! Error_output_enum {
     ($name:ident { $($variants:tt)* }) => {
-        #[derive(bitbash::BitEnum, Copy, Clone, PartialEq, Eq, Debug)]
+        #[derive(bitbash::BitEnumNonConst, Copy, Clone, PartialEq, Eq, Debug)]
         #[non_exhaustive]
         #[repr(isize)]
         pub enum $name {

@@ -11,4 +11,4 @@ brutos-alloc = { path = "../../alloc" }
 brutos-memory-units = { path = "../../memory/units" }
 brutos-util = { path = "../../util" }
 
-bitbash = { version = "0.2.0", features = ["const"] }
+bitbash = { version = "0.5.1", features = ["const"] }

@@ -22,7 +22,7 @@ brutos-sync = { path = "../sync" }
 brutos-syscall = { path = "../syscall" }
 brutos-util = { path = "../util" }
 
-bitbash = { version = "0.2.0", features = ["const"] }
+bitbash = { version = "0.5.1", features = ["const"] }
 
 [[bin]]
 name = "brutos-kernel"

@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 brutos-util = { path = "../../util" }
 
-bitbash = { version = "0.2.0", features = ["const"] }
+bitbash = { version = "0.5.1", features = ["const"] }
 
 [features]
 std = ["brutos-util/std"]
