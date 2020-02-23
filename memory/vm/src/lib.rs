@@ -282,18 +282,6 @@ where
             })?)
     }
 
-    pub fn prefill(
-        self: Pin<&Self>,
-        mapping: &Pin<Arc<Mapping<Cx>, Cx>>,
-    ) -> Result<(), FillError<Cx>> {
-        let busy_guard = mapping.as_ref().do_busy_work()?;
-        for offset in mapping.page_offsets() {
-            self.fill(mapping, mapping.range.start + offset, offset)?;
-        }
-        drop(busy_guard);
-        Ok(())
-    }
-
     pub fn destroy_mapping(
         self: Pin<&Self>,
         mapping_addr: VirtAddr,
@@ -431,7 +419,7 @@ where
         mapping: &Pin<Arc<Mapping<Cx>, Cx>>,
         addr: VirtAddr,
         offset: usize,
-    ) -> Result<(), FillError<Cx>> {
+    ) -> Result<MmuFlags<CacheType<Cx>>, FillError<Cx>> {
         assert_eq!(offset % mapping.page_size.order().size(), 0);
 
         let (page, writable_page) = self
@@ -450,7 +438,7 @@ where
         {
             self.release_source_page(mapping, page, offset);
         }
-        Ok(())
+        Ok(mmu_flags)
     }
 }
 
@@ -534,12 +522,7 @@ where
     ) -> Result<(), CowError<Cx>> {
         let ps = mapping.page_size;
         let mut mmu_map = self.mmu_map().lock();
-        let entry = match self
-            .mmu_map()
-            .lock()
-            .get_entry(ps, addr)
-            .map_err(CowErr::Get)?
-        {
+        let entry = match mmu_map.get_entry(ps, addr).map_err(CowErr::Get)? {
             None => return Ok(()),
             Some(entry) if entry.flags(ps).copied => return Ok(()),
             Some(x) => x,
@@ -594,5 +577,42 @@ where
                 Source::Private(obj) => obj.writable() && obj.unique_page(obj.meta(page)),
             }
         }
+    }
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PrefillErr<GenerateErr, MapErr, GetErr, MapPhysPageErr> {
+    Fill(FillErr<GenerateErr, MapErr>),
+    Cow(CowErr<MapErr, GetErr, MapPhysPageErr>),
+    MappingWasDestroyed,
+}
+
+pub type PrefillError<Cx> = PrefillErr<GenerateErr<Cx>, MapErr<Cx>, GetErr<Cx>, MapPhysPageErr<Cx>>;
+
+impl<E1, E2, E3, E4> From<MappingWasDestroyed> for PrefillErr<E1, E2, E3, E4> {
+    fn from(MappingWasDestroyed: MappingWasDestroyed) -> PrefillErr<E1, E2, E3, E4> {
+        PrefillErr::MappingWasDestroyed
+    }
+}
+
+impl<Cx: Context> Space<Cx>
+where
+    Cx::PageData: AsRef<PageRefCount>,
+{
+    pub fn prefill(
+        self: Pin<&Self>,
+        mapping: &Pin<Arc<Mapping<Cx>, Cx>>,
+    ) -> Result<(), PrefillError<Cx>> {
+        let busy_guard = mapping.as_ref().do_busy_work()?;
+        for offset in mapping.page_offsets() {
+            let addr = mapping.range.start + offset;
+            let page_mmu_flags = self.fill(mapping, addr, offset).map_err(PrefillErr::Fill)?;
+            if mapping.flags.mmu.writable && !page_mmu_flags.writable {
+                self.do_cow(mapping, addr, offset)
+                    .map_err(PrefillErr::Cow)?;
+            }
+        }
+        drop(busy_guard);
+        Ok(())
     }
 }

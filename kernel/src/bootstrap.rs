@@ -25,7 +25,7 @@ pub enum Error {
     Elf(elf::Error),
     MmuMap(<ArchMmuMap as MmuMap>::MapErr),
     VmCreate(vm::CreateError),
-    VmFill(vm::FillError<Cx>),
+    VmPrefill(vm::PrefillError<Cx>),
     NoBootstrap,
     OutOfMemory,
     InvalidExecutable,
@@ -133,7 +133,10 @@ fn load_bootstrap(
             )
             .map_err(Error::VmCreate)?;
 
-        addr_space.vm().prefill(&mapping).map_err(Error::VmFill)?;
+        addr_space
+            .vm()
+            .prefill(&mapping)
+            .map_err(Error::VmPrefill)?;
 
         let mmu_map = addr_space.vm().mmu_map().lock();
         for offset in (0..segment_filesize).step_by(PAGE_SIZE) {
