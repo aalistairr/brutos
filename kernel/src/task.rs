@@ -3,6 +3,7 @@ use core::ptr::NonNull;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{AllocOne, Arc, ArcInner, OutOfMemory, PinWeak};
+use brutos_memory_traits::{MmuFlags, PageSize};
 use brutos_memory_units::arch::PAGE_SIZE;
 use brutos_memory_units::VirtAddr;
 use brutos_memory_vm as vm;
@@ -11,6 +12,7 @@ use brutos_sync::spinlock::{Spinlock, SpinlockGuard};
 use brutos_task::{sched, Task};
 
 use crate::memory::addr_space::AddressSpace;
+use crate::memory::Object;
 use crate::Cx;
 
 unsafe impl brutos_sync::Critical for Cx {
@@ -71,9 +73,10 @@ static mut IDLE_TASK: core::mem::MaybeUninit<Pin<Arc<Task<Cx>, Cx>>> =
 pub unsafe fn create_idle_task() -> Result<(), OutOfMemory> {
     let page_tables = AddressSpace::kernel()
         .vm()
-        .mmu_tables()
+        .mmu_map()
         .lock()
-        .page_tables();
+        .page_tables()
+        .expect("the kernel has no page tables");
     IDLE_TASK.write(Task::new(
         Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
             AddressSpace::kernel(),
@@ -121,9 +124,10 @@ pub unsafe fn create_janitor() -> Result<(), OutOfMemory> {
     JANITOR_TX = Some(tx);
     let page_tables = AddressSpace::kernel()
         .vm()
-        .mmu_tables()
+        .mmu_map()
         .lock()
-        .page_tables();
+        .page_tables()
+        .expect("the kernel has no page tables");
     let janitor = Task::new(
         Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
             AddressSpace::kernel(),
@@ -153,42 +157,35 @@ impl brutos_task::Context for Cx {
     type AddrSpace = Spinlock<TaskAddrSpace, Cx>;
 
     fn alloc_stack(&mut self) -> Result<VirtAddr, OutOfMemory> {
-        use vm::mappings::MapError;
-        use vm::mmu;
-        use vm::FillError;
+        use vm::CreateError;
         let kernel = unsafe { AddressSpace::kernel() };
         let mapping = kernel
             .vm()
             .create_mapping(
                 STACK_SIZE,
                 vm::Location::Aligned(PAGE_SIZE),
-                vm::Source::Private(vm::Object::Anonymous),
-                vm::mmu::PageSize::Normal,
+                vm::Source::Private(Object::Anonymous),
+                PageSize::Normal,
                 vm::Flags {
-                    mapping: vm::mappings::Flags { guard_pages: true },
-                    mmu: vm::mmu::Flags {
+                    mapping: vm::MappingFlags {
+                        guarded: true,
+                        wired: true,
+                    },
+                    mmu: MmuFlags {
                         user_accessible: false,
                         writable: true,
                         executable: false,
                         global: true,
-                        cache_disabled: false,
-                        writethrough: false,
+                        copied: false,
+                        cache_type: 0,
                     },
                 },
             )
             .map_err(|e| match e {
-                MapError::OutOfSpace
-                | MapError::OutsideSpaceRange
-                | MapError::InvalidParameters => unreachable!(),
-                MapError::OutOfMemory => OutOfMemory,
+                CreateError::NoSpace | CreateError::InvalidParameters => unreachable!(),
+                CreateError::OutOfMemory => OutOfMemory,
             })?;
-        kernel.vm().prefill(mapping.as_ref()).map_err(|e| match e {
-            FillError::Map(mmu::MapError::OutOfMemory) | FillError::OutOfMemory => OutOfMemory,
-            FillError::Map(mmu::MapError::Obstructed)
-            | FillError::Map(mmu::MapError::NotAllocated)
-            | FillError::MappingWasDestroyed
-            | FillError::MapPhysPage(()) => unreachable!(),
-        })?;
+        kernel.vm().prefill(&mapping).map_err(|_| OutOfMemory)?;
         Ok(mapping.range.end)
     }
 
@@ -196,7 +193,7 @@ impl brutos_task::Context for Cx {
         let kernel = AddressSpace::kernel();
         kernel
             .vm()
-            .remove_mapping(addr - STACK_SIZE)
+            .destroy_mapping(addr - STACK_SIZE)
             .expect("failed to deallocate stack");
     }
 

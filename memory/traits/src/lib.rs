@@ -2,7 +2,7 @@
 
 use core::ptr::NonNull;
 
-pub use brutos_memory_units::{Order, PhysAddr, VirtAddr};
+pub use brutos_memory_units::{MmuFlags, Order, PageSize, PhysAddr, VirtAddr};
 
 pub unsafe trait AllocMappedPage {
     const MAX_ORDER: Order;
@@ -42,4 +42,52 @@ pub unsafe trait MapPhysPage {
         })
         .and_then(core::convert::identity)
     }
+}
+
+pub trait MmuMap {
+    type MapErr;
+    type UnmapErr;
+    type GetErr;
+    type Entry: MmuEntry<CacheType = Self::CacheType>;
+    type CacheType: Copy;
+
+    fn map_keep(
+        &mut self,
+        flags: MmuFlags<Self::CacheType>,
+        page_size: PageSize,
+        virt_addr: VirtAddr,
+        phys_addr: PhysAddr,
+    ) -> Result<bool, Self::MapErr>;
+    fn map_replace(
+        &mut self,
+        flags: MmuFlags<Self::CacheType>,
+        page_size: PageSize,
+        virt_addr: VirtAddr,
+        phys_addr: PhysAddr,
+    ) -> Result<Option<Self::Entry>, Self::MapErr>;
+    fn get_entry(
+        &self,
+        page_size: PageSize,
+        virt_addr: VirtAddr,
+    ) -> Result<Option<Self::Entry>, Self::GetErr>;
+    fn compare_and_map(
+        &mut self,
+        flags: MmuFlags<Self::CacheType>,
+        page_size: PageSize,
+        virt_addr: VirtAddr,
+        compare_entry: Self::Entry,
+        phys_addr: PhysAddr,
+    ) -> Result<bool, Self::MapErr>;
+    fn unmap(
+        &mut self,
+        page_size: PageSize,
+        virt_addr: VirtAddr,
+    ) -> Result<Option<Self::Entry>, Self::UnmapErr>;
+}
+
+pub trait MmuEntry: Copy {
+    type CacheType: Copy;
+
+    fn address(&self, page_size: PageSize) -> PhysAddr;
+    fn flags(&self, page_size: PageSize) -> MmuFlags<Self::CacheType>;
 }

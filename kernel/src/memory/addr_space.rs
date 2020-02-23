@@ -2,9 +2,11 @@ use core::pin::Pin;
 use core::sync::atomic::{AtomicBool, Ordering};
 
 use brutos_alloc::{Arc, OutOfMemory};
+use brutos_memory_traits::MmuMap;
 use brutos_memory_vm as vm;
 use brutos_sync::mutex::Mutex;
 
+use crate::arch::memory::MmuMap as ArchMmuMap;
 use crate::Cx;
 
 pub struct AddressSpace {
@@ -21,11 +23,11 @@ pub unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
             is_alive: AtomicBool::new(true),
             vm: vm::Space::new(
                 crate::arch::memory::KERNEL_ADDR_SPACE_RANGE,
-                crate::arch::memory::create_kernel_mmu_tables()?,
+                crate::arch::memory::create_kernel_mmu_map()?,
             ),
         })
         .map_err(|(e, space)| {
-            crate::arch::memory::destroy_kernel_mmu_tables(Mutex::into_inner(space.vm.mmu_tables));
+            crate::arch::memory::destroy_kernel_mmu_map(Mutex::into_inner(space.vm.mmu_map));
             e
         })?,
     );
@@ -34,16 +36,17 @@ pub unsafe fn create_kernel_address_space() -> Result<(), OutOfMemory> {
     Ok(())
 }
 
-pub fn create_user_address_space() -> Result<Pin<Arc<AddressSpace, Cx>>, vm::mmu::MapError> {
+pub fn create_user_address_space(
+) -> Result<Pin<Arc<AddressSpace, Cx>>, <ArchMmuMap as MmuMap>::MapErr> {
     let addr_space = Arc::pin(AddressSpace {
         is_alive: AtomicBool::new(true),
         vm: vm::Space::new(crate::arch::memory::USER_ADDR_SPACE_RANGE, unsafe {
-            crate::arch::memory::create_user_mmu_tables()?
+            crate::arch::memory::create_user_mmu_map()?
         }),
     })
     .map_err(|(e, space)| {
         unsafe {
-            crate::arch::memory::destroy_user_mmu_tables(Mutex::into_inner(space.vm.mmu_tables));
+            crate::arch::memory::destroy_user_mmu_map(Mutex::into_inner(space.vm.mmu_map));
         }
         e
     })?;

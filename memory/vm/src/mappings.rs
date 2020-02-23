@@ -1,81 +1,26 @@
 use core::ops::Range;
 use core::pin::Pin;
 
-use brutos_alloc::{AllocOne, Arc, ArcInner};
+use brutos_alloc::Arc;
 use brutos_memory_units::arch::PAGE_SIZE;
 use brutos_memory_units::VirtAddr;
-use brutos_util::linked_list::{LinkedList, Node, Transient, TransientMut};
+use brutos_util::linked_list::{LinkedList, Transient};
 
-pub trait Context<T>: Default + AllocOne<ArcInner<Mapping<T, Self>>> {}
+use super::{
+    Context, CreateError, DestroyErr, DestroyError, Flags, Location, Mapping, MappingFlags,
+    MappingSel,
+};
 
-impl<T, Cx> Context<T> for Cx where Cx: Default + AllocOne<ArcInner<Mapping<T, Self>>> {}
-
-pub struct Mappings<T, Cx: Context<T>> {
+pub struct Mappings<Cx: Context> {
     range: Range<VirtAddr>,
-    mappings: LinkedList<MappingSel<T, Cx>>,
+    mappings: LinkedList<MappingSel<Cx>>,
 }
 
-brutos_util::selector!(MappingSel<T, Cx: Context<T>>: Arc<Mapping<T, Cx>, Cx> => node);
-pub struct Mapping<T, Cx: Context<T>> {
-    pub range: Range<VirtAddr>,
-    pub flags: Flags,
-    data: T,
-    node: Node<MappingSel<T, Cx>>,
-}
-
-impl<T, Cx: Context<T>> core::ops::Deref for Mapping<T, Cx> {
-    type Target = T;
-
-    fn deref(&self) -> &T {
-        &self.data
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum MapError {
-    OutOfMemory,
-    OutsideSpaceRange,
-    OutOfSpace,
-    InvalidParameters,
-}
-
-impl From<brutos_alloc::OutOfMemory> for MapError {
-    fn from(brutos_alloc::OutOfMemory: brutos_alloc::OutOfMemory) -> MapError {
-        MapError::OutOfMemory
-    }
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum UnmapError {
-    NotStartOfMapping,
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug)]
-pub enum Location {
-    Aligned(usize),
-    Fixed(VirtAddr),
-}
-
-#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
-pub struct Flags {
-    pub guard_pages: bool,
-}
-
-impl<T, Cx: Context<T>> Mappings<T, Cx> {
-    pub fn new(range: Range<VirtAddr>) -> Mappings<T, Cx> {
-        assert!(range.start <= range.end);
+impl<Cx: Context> Mappings<Cx> {
+    pub fn new(range: Range<VirtAddr>) -> Mappings<Cx> {
         Mappings {
             range,
             mappings: LinkedList::new(),
-        }
-    }
-
-    fn deconstruct<'a>(
-        self: Pin<&'a mut Self>,
-    ) -> (&Range<VirtAddr>, Pin<&'a mut LinkedList<MappingSel<T, Cx>>>) {
-        unsafe {
-            let this = Pin::into_inner_unchecked(self);
-            (&this.range, Pin::new_unchecked(&mut this.mappings))
         }
     }
 
@@ -84,10 +29,19 @@ impl<T, Cx: Context<T>> Mappings<T, Cx> {
         mappings.initialize();
     }
 
-    pub fn find(&self, at: VirtAddr) -> Option<Transient<Pin<Arc<Mapping<T, Cx>, Cx>>>> {
+    fn deconstruct(
+        self: Pin<&mut Self>,
+    ) -> (&Range<VirtAddr>, Pin<&mut LinkedList<MappingSel<Cx>>>) {
+        unsafe {
+            let this = Pin::into_inner_unchecked(self);
+            (&this.range, Pin::new_unchecked(&mut this.mappings))
+        }
+    }
+
+    pub fn find(&self, addr: VirtAddr) -> Option<Transient<Pin<Arc<Mapping<Cx>, Cx>>>> {
         let mut next_mapping = self.mappings.first();
         while let Some(mapping) = next_mapping.take() {
-            if at >= mapping.range.start && at < mapping.range.end {
+            if addr >= mapping.range.start && addr < mapping.range.end {
                 return Some(mapping.get());
             }
             next_mapping = mapping.next().ok();
@@ -95,29 +49,29 @@ impl<T, Cx: Context<T>> Mappings<T, Cx> {
         None
     }
 
-    pub fn create(
+    pub fn add<F>(
         self: Pin<&mut Self>,
         size: usize,
         at: Location,
-        flags: Flags,
-        data: T,
-    ) -> Result<TransientMut<Pin<Arc<Mapping<T, Cx>, Cx>>>, MapError> {
+        flags: MappingFlags,
+        f: F,
+    ) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, CreateError>
+    where
+        F: FnOnce(Range<VirtAddr>) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, CreateError>,
+    {
+        let mut f = Some(f);
         let (self_range, mut mappings) = self.deconstruct();
-        let mut data = Some(data);
-        let data = &mut data;
         match mappings.as_mut().first_mut() {
-            None => new_mapping(self_range.clone(), size, at, flags, data)?
-                .ok_or(MapError::OutOfSpace)
-                .map(|m| {
-                    let mut m = mappings.push_back(m);
-                    unsafe { m.get_mut().transmute_lt() }
-                }),
+            None => {
+                let new_mapping = new_mapping(self_range.clone(), size, at, &mut f)?
+                    .ok_or(CreateError::NoSpace)?;
+                Ok(mappings.push_back(new_mapping).get().clone())
+            }
             Some(mapping) => {
                 let free_range = self_range.start..mapping.range.start;
                 let free_range = cut_free_range(free_range, None, Some(mapping.flags), flags);
-                if let Some(m) = new_mapping(free_range, size, at, flags, data)? {
-                    let mut m = mapping.insert_before_and_get(m);
-                    return Ok(unsafe { m.get_mut().transmute_lt() });
+                if let Some(new_mapping) = new_mapping(free_range, size, at, &mut f)? {
+                    return Ok(mapping.insert_before_and_get(new_mapping).get().clone());
                 }
 
                 let mut next_mapping = Some(mapping);
@@ -129,45 +83,44 @@ impl<T, Cx: Context<T>> Mappings<T, Cx> {
                     let free_range = mapping.range.end..next_start;
                     let free_range =
                         cut_free_range(free_range, Some(mapping.flags), next_flags, flags);
-                    if let Some(m) = new_mapping(free_range, size, at, flags, data)? {
-                        let mut m = mapping.insert_after_and_get(m);
-                        return Ok(unsafe { m.get_mut().transmute_lt() });
+                    if let Some(new_mapping) = new_mapping(free_range, size, at, &mut f)? {
+                        return Ok(mapping.insert_after_and_get(new_mapping).get().clone());
                     }
                     next_mapping = mapping.next().ok();
                 }
-                Err(MapError::OutOfSpace)
+                Err(CreateError::NoSpace)
             }
         }
     }
 
     pub fn remove(
         self: Pin<&mut Self>,
-        at: VirtAddr,
-    ) -> Result<Pin<Arc<Mapping<T, Cx>, Cx>>, UnmapError> {
+        addr: VirtAddr,
+    ) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, DestroyError<Cx>> {
         let (_, mappings) = self.deconstruct();
         let mut next_mapping = mappings.first_mut();
         while let Some(mapping) = next_mapping.take() {
-            if mapping.range.start == at {
+            if addr >= mapping.range.start && addr < mapping.range.end {
                 return Ok(mapping.unlink());
             }
             next_mapping = mapping.next().ok();
         }
-        Err(UnmapError::NotStartOfMapping)
+        Err(DestroyErr::MappingNotFound)
     }
 }
 
-fn cut_free_range(
+fn cut_free_range<CacheType>(
     free_range: Range<VirtAddr>,
-    before: Option<Flags>,
-    after: Option<Flags>,
-    new: Flags,
+    before: Option<Flags<CacheType>>,
+    after: Option<Flags<CacheType>>,
+    new: MappingFlags,
 ) -> Range<VirtAddr> {
-    let start = if new.guard_pages || before.map(|f| f.guard_pages).unwrap_or(false) {
+    let start = if new.guarded || before.map(|f| f.mapping.guarded).unwrap_or(false) {
         free_range.start.checked_add(PAGE_SIZE)
     } else {
         Some(free_range.start)
     };
-    let end = if new.guard_pages || after.map(|f| f.guard_pages).unwrap_or(false) {
+    let end = if new.guarded || after.map(|f| f.mapping.guarded).unwrap_or(false) {
         free_range.end.checked_sub(PAGE_SIZE)
     } else {
         Some(free_range.end)
@@ -198,28 +151,17 @@ fn available_addr(free_range: Range<VirtAddr>, size: usize, at: Location) -> Opt
     }
 }
 
-fn new_mapping<T, Cx: Context<T>>(
+fn new_mapping<Cx, F>(
     free_range: Range<VirtAddr>,
     size: usize,
     at: Location,
-    flags: Flags,
-    data: &mut Option<T>,
-) -> Result<Option<Pin<Arc<Mapping<T, Cx>, Cx>>>, MapError> {
+    create_mapping: &mut Option<F>,
+) -> Result<Option<Pin<Arc<Mapping<Cx>, Cx>>>, CreateError>
+where
+    Cx: Context,
+    F: FnOnce(Range<VirtAddr>) -> Result<Pin<Arc<Mapping<Cx>, Cx>>, CreateError>,
+{
     available_addr(free_range, size, at)
-        .map(|addr| {
-            Arc::pin(Mapping {
-                range: addr..addr + size,
-                data: data.take().unwrap(),
-                node: Node::new(),
-                flags,
-            })
-            .map_err(|(e, _)| e.into())
-        })
+        .map(|addr| (create_mapping.take().unwrap())(addr..addr + size))
         .transpose()
-}
-
-impl<T, Cx: Context<T>> Mapping<T, Cx> {
-    pub fn data(self: Pin<&Self>) -> Pin<&T> {
-        unsafe { self.map_unchecked(|x| &x.data) }
-    }
 }

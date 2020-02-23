@@ -8,6 +8,7 @@ edition = "2018"
 
 [dependencies]
 brutos-alloc = { path = "../../alloc" }
+brutos-memory-traits = { path = "../../memory/traits" }
 brutos-memory-units = { path = "../../memory/units" }
 brutos-util = { path = "../../util" }
 

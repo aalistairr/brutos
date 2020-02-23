@@ -10,9 +10,9 @@ edition = "2018"
 brutos-alloc = { path = "../../alloc" }
 brutos-memory-traits = { path = "../traits" }
 brutos-memory-units = { path = "../units" }
-brutos-platform-pc = { path = "../../platform/pc" }
 brutos-sync = { path = "../../sync" }
 brutos-util = { path = "../../util" }
 
 [features]
+default = []
 std = ["brutos-alloc/std", "brutos-memory-traits/std", "brutos-memory-units/std", "brutos-sync/std", "brutos-util/std"]

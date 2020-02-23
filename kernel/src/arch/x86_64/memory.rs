@@ -5,13 +5,17 @@ use core::ptr::NonNull;
 
 use brutos_alloc::{Arc, OutOfMemory};
 use brutos_memory_phys_alloc::bootstrap::{self, CutRange};
-use brutos_memory_traits::AllocPhysPage;
+use brutos_memory_traits::{AllocPhysPage, MapPhysPage, PageSize};
 use brutos_memory_units::{Order, PhysAddr, VirtAddr};
-use brutos_memory_vm::{self as vm, mmu};
+use brutos_memory_vm as vm;
+use brutos_platform_pc::mmu;
 
 use crate::memory::addr_space::AddressSpace;
 use crate::memory::alloc::FailedToBootstrap;
+use crate::memory::Object;
 use crate::Cx;
+
+pub type MmuMap = mmu::Map<Cx>;
 
 pub const PHYS_IDENT_OFFSET: usize = 0xffff880000000000;
 pub const PHYS_IDENT_SIZE: usize = 0x0000008000000000;
@@ -95,76 +99,99 @@ pub fn remove_reserved_memory(
     mmap
 }
 
-static mut KERNEL_PML4: [mmu::arch::Entry; 256] = [mmu::arch::Entry::new(); 256];
+unsafe impl mmu::Context for Cx {
+    fn alloc_table() -> Result<PhysAddr, OutOfMemory> {
+        <Cx as AllocPhysPage>::alloc(Order(0))
+            .map(|(addr, _)| addr)
+            .map_err(|()| OutOfMemory)
+    }
 
-pub unsafe fn create_kernel_mmu_tables() -> Result<mmu::Tables, OutOfMemory> {
-    let mut tables = mmu::Tables::with_root(
-        mmu::arch::Entry::new()
+    unsafe fn dealloc_table(addr: PhysAddr) {
+        <Cx as AllocPhysPage>::dealloc(addr, Order(0));
+    }
+
+    fn map_table(addr: PhysAddr) -> NonNull<mmu::Table> {
+        map_phys_ident(addr, Order(0).size())
+            .expect("Failed to map page translation table into memory")
+            .cast()
+    }
+}
+
+static mut KERNEL_PML4: [mmu::Entry; 256] = [mmu::Entry::new(); 256];
+
+pub unsafe fn create_kernel_mmu_map() -> Result<mmu::Map<Cx>, OutOfMemory> {
+    let mut map = mmu::Map::with_root(
+        mmu::Entry::new()
             .with_address(pml4_phys())
-            .with_population(mmu::arch::Entry::PERMANENT)
+            .with_permanent(true)
             .with_present(true),
     );
     for pml4e_i in 0..256 {
-        KERNEL_PML4[pml4e_i] = mmu::arch::create_permanent_table(
-            &mut Cx,
-            &mut tables.root,
-            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
-            mmu::arch::Level::Pml4,
-            Default::default(),
-        )
-        .expect("failed to create kernel mmu tables");
+        KERNEL_PML4[pml4e_i] = map
+            .create_permanent_table(
+                Default::default(),
+                mmu::Level::Pml4,
+                KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::Level::Pml4.entry_size(),
+            )
+            .expect("failed to create kernel mmu tables");
     }
-    Ok(tables)
+    Ok(map)
 }
 
-pub unsafe fn destroy_kernel_mmu_tables(_tables: mmu::Tables) {}
+pub unsafe fn destroy_kernel_mmu_map(_mmu_map: mmu::Map<Cx>) {}
 
-pub unsafe fn create_user_mmu_tables() -> Result<mmu::Tables, mmu::MapError> {
-    let mut tables = mmu::Tables::new();
+pub unsafe fn create_user_mmu_map() -> Result<mmu::Map<Cx>, mmu::MapError> {
+    let mut map = mmu::Map::new();
     for pml4e_i in 0..256 {
-        mmu::arch::x86_64::set_entry(
-            &mut Cx,
-            &mut tables.root,
-            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
-            mmu::arch::Level::Pml4,
+        map.set_entry(
+            Default::default(),
+            mmu::Level::Pml4,
+            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::Level::Pml4.entry_size(),
             KERNEL_PML4[pml4e_i],
-            Default::default(),
-        )?;
+        )
+        .map_err(|e| match e {
+            mmu::SetError::Exists => unreachable!(),
+            mmu::SetError::OutOfMemory => mmu::MapError::OutOfMemory,
+            mmu::SetError::Obstructed => mmu::MapError::Obstructed,
+        })?;
     }
-    Ok(tables)
+    Ok(map)
 }
 
-pub unsafe fn destroy_user_mmu_tables(mut tables: mmu::Tables) {
+pub unsafe fn destroy_user_mmu_map(mut map: mmu::Map<Cx>) {
     for pml4e_i in 0..256 {
-        let _ = mmu::arch::x86_64::clear_entry(
-            &mut Cx,
-            &mut tables.root,
-            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::arch::Level::Pml4.entry_size(),
-            mmu::arch::Level::Pml4,
+        let _ = map.clear_entry(
+            mmu::Level::Pml4,
+            KERNEL_ADDR_SPACE_RANGE.start + pml4e_i * mmu::Level::Pml4.entry_size(),
         );
     }
 }
 
-static mut SHARED_ORDER9_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
+const SHARED_EMPTY_PAGE_ORDER: Order = Order(9);
+static mut SHARED_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
     MaybeUninit::uninit();
 
 pub fn initialize() {
-    let order9 =
-        <Cx as AllocPhysPage>::alloc(Order(9)).expect("failed to allocate shared empty page");
-    order9.1.as_ref().inc();
+    let shared_empty_page = <Cx as AllocPhysPage>::alloc(SHARED_EMPTY_PAGE_ORDER)
+        .expect("failed to allocate shared empty page");
     unsafe {
-        SHARED_ORDER9_EMPTY_PAGE.write(order9);
+        <Cx as MapPhysPage>::write_bytes(shared_empty_page.0, 0, SHARED_EMPTY_PAGE_ORDER)
+            .expect("failed to zero shared empty page");
+    }
+    shared_empty_page.1.as_ref().inc_page_refcount();
+    unsafe {
+        SHARED_EMPTY_PAGE.write(shared_empty_page);
     }
 }
 
-impl vm::Context for Cx {
-    fn shared_empty_page(&mut self, order: Order) -> Option<(PhysAddr, &Self::PageData)> {
-        if order <= Order(9) {
-            let (addr, data) = unsafe { &*SHARED_ORDER9_EMPTY_PAGE.as_ptr() };
-            Some((*addr, data))
-        } else {
-            None
-        }
+pub fn shared_empty_page(
+    page_size: PageSize,
+) -> Option<(PhysAddr, &'static <Cx as AllocPhysPage>::PageData)> {
+    if page_size.order() <= SHARED_EMPTY_PAGE_ORDER {
+        let &shared_empty_page = unsafe { &*SHARED_EMPTY_PAGE.as_ptr() };
+        Some(shared_empty_page)
+    } else {
+        None
     }
 }
 
@@ -174,17 +201,20 @@ pub fn create_kernel_mappings(addr_space: &Pin<Arc<AddressSpace, Cx>>) {
         .create_mapping(
             PHYS_IDENT_SIZE,
             vm::Location::Fixed(VirtAddr(PHYS_IDENT_OFFSET)),
-            vm::Source::Raw(PhysAddr(0)),
-            mmu::PageSize::Large,
+            vm::Source::Private(Object::Raw(PhysAddr(0))),
+            vm::PageSize::Large,
             vm::Flags {
-                mapping: vm::mappings::Flags { guard_pages: false },
-                mmu: mmu::Flags {
+                mapping: vm::MappingFlags {
+                    guarded: false,
+                    wired: true,
+                },
+                mmu: vm::MmuFlags {
                     user_accessible: false,
                     writable: true,
                     executable: false,
                     global: true,
-                    cache_disabled: false,
-                    writethrough: false,
+                    copied: false,
+                    cache_type: 0,
                 },
             },
         )
@@ -194,17 +224,20 @@ pub fn create_kernel_mappings(addr_space: &Pin<Arc<AddressSpace, Cx>>) {
         .create_mapping(
             VMA_SIZE,
             vm::Location::Fixed(VirtAddr(VMA_OFFSET)),
-            vm::Source::Raw(PhysAddr(0)),
-            mmu::PageSize::Normal,
+            vm::Source::Private(Object::Raw(PhysAddr(0))),
+            vm::PageSize::Normal,
             vm::Flags {
-                mapping: vm::mappings::Flags { guard_pages: false },
-                mmu: mmu::Flags {
+                mapping: vm::MappingFlags {
+                    guarded: false,
+                    wired: true,
+                },
+                mmu: vm::MmuFlags {
                     user_accessible: false,
                     writable: true,
                     executable: true,
                     global: true,
-                    cache_disabled: false,
-                    writethrough: false,
+                    copied: false,
+                    cache_type: 0,
                 },
             },
         )

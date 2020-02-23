@@ -235,12 +235,19 @@ impl Order {
     }
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, Default, Debug)]
-pub struct MmuFlags {
+#[derive(Copy, Clone, PartialEq, Eq, Debug)]
+pub enum PageSize {
+    Normal,
+    Large,
+    Huge,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Default)]
+pub struct MmuFlags<CacheType> {
     pub user_accessible: bool,
     pub writable: bool,
     pub executable: bool,
     pub global: bool,
-    pub cache_disabled: bool,
-    pub writethrough: bool,
+    pub copied: bool,
+    pub cache_type: CacheType,
 }

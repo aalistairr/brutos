@@ -6,7 +6,7 @@ use brutos_alloc::{Arc, OutOfMemory};
 use brutos_cpio as cpio;
 use brutos_elf as elf;
 use brutos_elf::SegmentTypeStandard;
-use brutos_memory_traits::MapPhysPage;
+use brutos_memory_traits::{MapPhysPage, MmuEntry, MmuFlags, MmuMap, PageSize};
 use brutos_memory_units::arch::PAGE_SIZE;
 use brutos_memory_units::{Order, VirtAddr};
 use brutos_memory_vm as vm;
@@ -14,16 +14,18 @@ use brutos_sync::spinlock::Spinlock;
 use brutos_task::{self as task, Task};
 use brutos_util::UInt;
 
+use crate::arch::memory::MmuMap as ArchMmuMap;
 use crate::memory::addr_space::{create_user_address_space, AddressSpace};
+use crate::memory::Object;
 use crate::Cx;
 
 #[derive(Clone, Debug)]
 pub enum Error {
     Cpio(cpio::Error),
     Elf(elf::Error),
-    VmMappings(vm::mappings::MapError),
-    VmFill(vm::FillError<<Cx as MapPhysPage>::Err>),
-    Map(vm::mmu::MapError),
+    MmuMap(<ArchMmuMap as MmuMap>::MapErr),
+    VmCreate(vm::CreateError),
+    VmFill(vm::FillError<Cx>),
     NoBootstrap,
     OutOfMemory,
     InvalidExecutable,
@@ -47,32 +49,19 @@ impl From<OutOfMemory> for Error {
     }
 }
 
-impl From<vm::mappings::MapError> for Error {
-    fn from(e: vm::mappings::MapError) -> Error {
-        Error::VmMappings(e)
-    }
-}
-
-impl From<vm::FillError<<Cx as MapPhysPage>::Err>> for Error {
-    fn from(e: vm::FillError<<Cx as MapPhysPage>::Err>) -> Error {
-        Error::VmFill(e)
-    }
-}
-
-impl From<vm::mmu::MapError> for Error {
-    fn from(e: vm::mmu::MapError) -> Error {
-        Error::Map(e)
-    }
-}
-
 static mut ADDR_SPACE: MaybeUninit<Pin<Arc<AddressSpace, Cx>>> = MaybeUninit::uninit();
 
 pub unsafe fn create_bootstrap_task(cpio_module: &[u8]) -> Result<Pin<Arc<Task<Cx>, Cx>>, Error> {
     let bootstrap = cpio_get_bootstrap(cpio_module)?;
 
-    let addr_space = ADDR_SPACE.write(create_user_address_space()?);
+    let addr_space = ADDR_SPACE.write(create_user_address_space().map_err(Error::MmuMap)?);
     let entry = load_bootstrap(addr_space, bootstrap).expect("failed to load bootstrap");
-    let page_tables = addr_space.vm().mmu_tables().lock().page_tables();
+    let page_tables = addr_space
+        .vm()
+        .mmu_map()
+        .lock()
+        .page_tables()
+        .expect("page tables have not been created");
     Ok(Task::new(
         Spinlock::new(crate::task::TaskAddrSpace::Inactive(Arc::pin_downgrade(
             addr_space,
@@ -120,34 +109,42 @@ fn load_bootstrap(
             return Err(Error::InvalidExecutable);
         }
 
-        let mapping = addr_space.vm().create_mapping(
-            segment_memsize.align_up(PAGE_SIZE),
-            vm::Location::Fixed(segment_addr),
-            vm::Source::Private(vm::Object::Anonymous),
-            vm::mmu::PageSize::Normal,
-            vm::Flags {
-                mapping: Default::default(),
-                mmu: vm::mmu::Flags {
-                    user_accessible: true,
-                    writable: segment.flags.write(),
-                    executable: segment.flags.execute(),
-                    global: false,
-                    cache_disabled: false,
-                    writethrough: false,
+        let mapping = addr_space
+            .vm()
+            .create_mapping(
+                segment_memsize.align_up(PAGE_SIZE),
+                vm::Location::Fixed(segment_addr),
+                vm::Source::Private(Object::Anonymous),
+                PageSize::Normal,
+                vm::Flags {
+                    mapping: vm::MappingFlags {
+                        guarded: false,
+                        wired: true,
+                    },
+                    mmu: MmuFlags {
+                        user_accessible: true,
+                        writable: segment.flags.write(),
+                        executable: segment.flags.execute(),
+                        global: false,
+                        copied: false,
+                        cache_type: 0,
+                    },
                 },
-            },
-        )?;
+            )
+            .map_err(Error::VmCreate)?;
 
-        addr_space.vm().prefill(mapping.as_ref())?;
+        addr_space.vm().prefill(&mapping).map_err(Error::VmFill)?;
 
-        let mut mmu_tables = addr_space.vm().mmu_tables().lock();
+        let mmu_map = addr_space.vm().mmu_map().lock();
         for offset in (0..segment_filesize).step_by(PAGE_SIZE) {
             const FAIL_GET_PAGE: &str = "load_bootstrap: failed to get mapped page";
             let addr = segment_addr + offset;
-            let page = mmu_tables
-                .get_page(&mut Cx::default(), addr, vm::mmu::PageSize::Normal)
+            let mmu_entry = mmu_map
+                .get_entry(PageSize::Normal, addr)
                 .expect(FAIL_GET_PAGE)
                 .expect(FAIL_GET_PAGE);
+            let page =
+                <<ArchMmuMap as MmuMap>::Entry as MmuEntry>::address(&mmu_entry, PageSize::Normal);
             let size = min(PAGE_SIZE, segment_filesize - offset);
 
             let segment_bytes =

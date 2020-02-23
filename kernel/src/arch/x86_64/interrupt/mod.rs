@@ -5,7 +5,7 @@ use core::pin::Pin;
 use bitbash::bitfield;
 
 use brutos_memory_units::VirtAddr;
-use brutos_memory_vm::{FaultConditions, PageFaultError};
+use brutos_memory_vm::{FaultConditions, FaultErr};
 use brutos_platform_pc as pc;
 use brutos_platform_pc::cpuid;
 use brutos_platform_pc::interrupt::apic::{self, Apic};
@@ -149,14 +149,14 @@ fn page_fault(_vector: usize, stack_frame: &InterruptStackFrame, error: usize) {
     };
     let error = PageFaultErrorCode(error);
     let fault_conditions = FaultConditions {
-        was_present: error.present(),
-        was_write: error.write(),
-        was_instruction_fetch: error.instruction_fetch(),
-        was_user_access: error.user_mode(),
+        present: error.present(),
+        write: error.write(),
+        instruction_fetch: error.instruction_fetch(),
+        user_access: error.user_mode(),
     };
     match addr_space.vm().page_fault(fault_addr, fault_conditions) {
         Ok(()) => (),
-        Err(PageFaultError::InvalidAccess) => unsafe { kill_addr_space() },
+        Err(FaultErr::InvalidAccess) => unsafe { kill_addr_space() },
         Err(e) => panic!("error in page fault: {:?}", e),
     }
 }
