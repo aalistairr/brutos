@@ -1433,4 +1433,144 @@ mod tests {
             assert_eq!(sorted(state_to_hash_map()), vec![]);
         }
     }
+
+    #[cfg(not(miri))]
+    use test::black_box;
+    #[cfg(miri)]
+    fn black_box<T>(x: T) -> T {
+        x
+    }
+
+    struct BenchState {
+        tables: HashMap<PhysAddr, BenchTable>,
+    }
+
+    struct BenchTable(*mut Table);
+
+    impl Drop for BenchTable {
+        fn drop(&mut self) {
+            unsafe {
+                let _ = Box::from_raw(self.0);
+            }
+        }
+    }
+
+    thread_local! {
+        static BENCH_STATE: RefCell<BenchState> = RefCell::new(BenchState { tables: new_hashmap() });
+    }
+
+    fn clear_bench_state() {
+        BENCH_STATE.with(|bench_state| {
+            *bench_state.borrow_mut() = BenchState {
+                tables: new_hashmap(),
+            }
+        });
+    }
+
+    unsafe impl Context for BenchState {
+        fn alloc_table() -> Result<PhysAddr, OutOfMemory> {
+            BENCH_STATE.with(|bench_state| {
+                let mut bench_state = bench_state.borrow_mut();
+                const NEW_ENTRY_CELL: EntryCell = EntryCell::new();
+                let table = Box::leak(Box::new(Table([NEW_ENTRY_CELL; 512])));
+                let addr =
+                    PhysAddr((table as *mut Table as usize).wrapping_add(0xffff880000000000));
+                bench_state.tables.insert(addr, BenchTable(table));
+                Ok(black_box(addr))
+            })
+        }
+
+        unsafe fn dealloc_table(addr: PhysAddr) {
+            BENCH_STATE.with(|bench_state| {
+                let _ = bench_state.borrow_mut().tables.remove(&addr);
+            });
+        }
+
+        fn map_table(addr: PhysAddr) -> NonNull<Table> {
+            unsafe { NonNull::new_unchecked(addr.0.wrapping_sub(0xffff880000000000) as *mut Table) }
+        }
+    }
+
+    #[cfg(not(miri))]
+    #[bench]
+    fn bench_one(b: &mut test::Bencher) {
+        clear_bench_state();
+        let mut map = Map::<BenchState>::new();
+
+        assert_eq!(
+            map.map_replace(Default::default(), Normal, VirtAddr(0), PhysAddr(0)),
+            Ok(None)
+        );
+
+        b.iter(|| {
+            black_box(&mut map)
+                .map_replace(
+                    Default::default(),
+                    Normal,
+                    black_box(VirtAddr(0)),
+                    black_box(PhysAddr(0)),
+                )
+                .unwrap();
+        });
+    }
+
+    #[cfg(not(miri))]
+    #[bench]
+    fn bench_one_optimal(b: &mut test::Bencher) {
+        clear_bench_state();
+        let mut map = Map::<BenchState>::new();
+
+        assert_eq!(
+            map.map_replace(Default::default(), Normal, VirtAddr(0), PhysAddr(0)),
+            Ok(None)
+        );
+
+        let addr = black_box(VirtAddr(0));
+        let root = black_box(&mut map.roote);
+        b.iter(|| {
+            assert!(addr.is_aligned(Level::Pt.entry_size()));
+
+            let root_e = root.read();
+            if !root_e.present() {
+                panic!()
+            }
+
+            let pml4: NonNull<EntryCell> = BenchState::map_table(root_e.address()).cast();
+            let pml4_i = Level::Pml4.table_index(addr);
+            let pml4_ec = unsafe { &*pml4.as_ptr().add(pml4_i) };
+            let pml4_e = pml4_ec.read();
+            if !pml4_e.present() {
+                panic!()
+            }
+
+            let pdpt: NonNull<EntryCell> = BenchState::map_table(pml4_e.address()).cast();
+            let pdpt_i = Level::Pdpt.table_index(addr);
+            let pdpt_ec = unsafe { &*pdpt.as_ptr().add(pdpt_i) };
+            let pdpt_e = pdpt_ec.read();
+            if !pdpt_e.present() || pdpt_e.pml4e_pdpte_pde_ps() {
+                panic!()
+            }
+
+            let pd: NonNull<EntryCell> = BenchState::map_table(pdpt_e.address()).cast();
+            let pd_i = Level::Pd.table_index(addr);
+            let pd_ec = unsafe { &mut *pd.as_ptr().add(pd_i) };
+            let pd_e = pd_ec.read();
+            if !pd_e.present() || pd_e.pml4e_pdpte_pde_ps() {
+                panic!()
+            }
+
+            let pt: NonNull<EntryCell> = BenchState::map_table(pd_e.address()).cast();
+            let pt_i = Level::Pt.table_index(addr);
+            let pt_ec = unsafe { &mut *pt.as_ptr().add(pt_i) };
+            let was_present = pt_ec.read().present();
+            pt_ec.write(
+                Entry::new()
+                    .with_present(true)
+                    .with_address(black_box(PhysAddr(0x0))),
+            );
+            if !was_present {
+                pd_ec.map(Entry::inc_population);
+            }
+        })
+    }
 }
