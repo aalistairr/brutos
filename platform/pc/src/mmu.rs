@@ -361,6 +361,7 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
         unreachable!()
     }
 
+    #[inline]
     fn dig(
         args: TrailArgs,
         child_level: Level,
@@ -389,6 +390,7 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
         Ok(child_entry_cell)
     }
 
+    #[cold]
     fn create_table(
         flags: &MmuFlags<CacheType>,
         entry_cell: &EntryCell,
