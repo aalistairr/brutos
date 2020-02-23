@@ -320,7 +320,6 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
         }
     }
 
-    #[allow(dead_code)]
     fn find(
         &mut self,
         alloc: bool,
