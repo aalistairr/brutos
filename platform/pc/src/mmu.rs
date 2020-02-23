@@ -399,7 +399,8 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
         let entry = Entry::new()
             .with_present(true)
             .with_address(table_addr)
-            .with_user_accessible(flags.user_accessible);
+            .with_user_accessible(flags.user_accessible)
+            .with_writable(true);
         entry_cell.write(entry);
         if let Some(parent_entry_cell) = parent_entry_cell {
             parent_entry_cell.map(Entry::inc_population);

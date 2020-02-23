@@ -85,6 +85,7 @@ pub unsafe extern "C" fn _start() {
 
         mov %cr0, %eax
         or $$0x80000000, %eax
+        or $$(1 << 16), %eax    // WP
         mov %eax, %cr0
 
         lgdt gdtr
