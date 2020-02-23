@@ -11,6 +11,10 @@ use crate::Cx;
 pub mod addr_space;
 pub mod alloc;
 
+pub fn initialize_with_phys_alloc() {
+    crate::arch::memory::initialize_with_phys_alloc();
+}
+
 #[derive(Default)]
 pub struct PageData {
     ref_count: PageRefCount,

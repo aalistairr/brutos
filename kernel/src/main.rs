@@ -37,6 +37,7 @@ pub unsafe fn main(
     let available_memory =
         memory::alloc::bootstrap(mmap).expect("Failed to bootstrap physical memory");
     println!("{} bytes available", available_memory);
+    memory::initialize_with_phys_alloc();
     memory::addr_space::create_kernel_address_space()
         .expect("failed to create kernel address space");
 

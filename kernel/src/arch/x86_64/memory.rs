@@ -1,4 +1,3 @@
-use core::mem::MaybeUninit;
 use core::ops::Range;
 use core::pin::Pin;
 use core::ptr::NonNull;
@@ -168,10 +167,9 @@ pub unsafe fn destroy_user_mmu_map(mut map: mmu::Map<Cx>) {
 }
 
 const SHARED_EMPTY_PAGE_ORDER: Order = Order(9);
-static mut SHARED_EMPTY_PAGE: MaybeUninit<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> =
-    MaybeUninit::uninit();
+static mut SHARED_EMPTY_PAGE: Option<(PhysAddr, &<Cx as AllocPhysPage>::PageData)> = None;
 
-pub fn initialize() {
+pub fn initialize_with_phys_alloc() {
     let shared_empty_page = <Cx as AllocPhysPage>::alloc(SHARED_EMPTY_PAGE_ORDER)
         .expect("failed to allocate shared empty page");
     unsafe {
@@ -180,7 +178,7 @@ pub fn initialize() {
     }
     shared_empty_page.1.as_ref().inc_page_refcount();
     unsafe {
-        SHARED_EMPTY_PAGE.write(shared_empty_page);
+        SHARED_EMPTY_PAGE = Some(shared_empty_page);
     }
 }
 
@@ -188,7 +186,7 @@ pub fn shared_empty_page(
     page_size: PageSize,
 ) -> Option<(PhysAddr, &'static <Cx as AllocPhysPage>::PageData)> {
     if page_size.order() <= SHARED_EMPTY_PAGE_ORDER {
-        let &shared_empty_page = unsafe { &*SHARED_EMPTY_PAGE.as_ptr() };
+        let &shared_empty_page = unsafe { SHARED_EMPTY_PAGE.as_ref().unwrap() };
         Some(shared_empty_page)
     } else {
         None
