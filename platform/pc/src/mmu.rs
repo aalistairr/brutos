@@ -407,6 +407,7 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
         Ok(entry)
     }
 
+    #[inline]
     fn pop_entry(
         level: Level,
         entry_cell: &mut Option<NonNull<EntryCell>>,
@@ -419,21 +420,30 @@ impl<'a, Cx: Context> Trail<'a, Cx> {
                 if entry.ps(level) || entry.population() > 0 {
                     return false;
                 }
-                entry_cell.write(Entry::new());
-                unsafe {
-                    Cx::dealloc_table(entry.address());
-                }
-                match parent_entry_cell {
-                    None => (),
-                    Some(Some(parent_entry_cell)) => {
-                        let parent_entry_cell = unsafe { parent_entry_cell.as_ref() };
-                        parent_entry_cell.map(Entry::dec_population);
-                    }
-                    Some(None) => unreachable!(),
-                }
+                Self::dealloc_table(entry, entry_cell, parent_entry_cell);
             }
         }
         true
+    }
+
+    #[cold]
+    fn dealloc_table(
+        entry: Entry,
+        entry_cell: &EntryCell,
+        parent_entry_cell: Option<&Option<NonNull<EntryCell>>>,
+    ) {
+        entry_cell.write(Entry::new());
+        unsafe {
+            Cx::dealloc_table(entry.address());
+        }
+        match parent_entry_cell {
+            None => (),
+            Some(Some(parent_entry_cell)) => {
+                let parent_entry_cell = unsafe { parent_entry_cell.as_ref() };
+                parent_entry_cell.map(Entry::dec_population);
+            }
+            Some(None) => unreachable!(),
+        }
     }
 }
 
