@@ -46,6 +46,12 @@ pub unsafe fn main(
     task::create_idle_task().expect("failed to create idle task");
     task::create_janitor().expect("failed to create janitor");
 
+    // run_demo();
+    run_bootstrap(init_module);
+}
+
+unsafe fn run_bootstrap(init_module: Option<&[u8]>) -> ! {
+    // schedule_demo();
     if let Some(init_module) = init_module {
         match bootstrap::create_bootstrap_task(init_module) {
             Ok(task) => {
@@ -57,5 +63,45 @@ pub unsafe fn main(
         }
     } else {
         panic!("nothing to do");
+    }
+}
+
+unsafe fn schedule_demo() {
+    use brutos_alloc::Arc;
+    use brutos_memory_units::VirtAddr;
+    use brutos_sync::spinlock::Spinlock;
+    use brutos_task::Task;
+
+    use crate::memory::addr_space::AddressSpace;
+    use crate::task::TaskAddrSpace;
+    let page_tables = AddressSpace::kernel()
+        .vm()
+        .mmu_map()
+        .lock()
+        .page_tables()
+        .expect("the kernel has no page tables");
+    for i in 0..10 {
+        let task = Task::new(
+            Spinlock::new(TaskAddrSpace::Inactive(Arc::pin_downgrade(
+                AddressSpace::kernel(),
+            ))),
+            i,
+            brutos_task::EntryPoint::Kernel(VirtAddr(demo as usize), i, 0),
+            page_tables,
+        )
+        .expect("Failed to create demo task");
+        task::scheduler().as_ref().schedule(task);
+    }
+}
+
+unsafe fn run_demo() -> ! {
+    schedule_demo();
+    <Cx as brutos_sync::waitq::Context>::unlock_and_yield(&AtomicBool::new(true));
+    unreachable!()
+}
+
+extern "C" fn demo(i: usize) {
+    loop {
+        println!("Task {} says hi", i);
     }
 }

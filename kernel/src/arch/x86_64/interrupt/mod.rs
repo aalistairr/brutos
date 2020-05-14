@@ -232,7 +232,7 @@ unsafe fn setup_apic() {
     let apic_addr = msr::read::<msr::Ia32ApicBase>().base();
     let apic_ptr = crate::arch::memory::map_phys_ident(apic_addr, core::mem::size_of::<Apic>())
         .expect("failed to map APIC into memory");
-    APIC = Some(Spinlock::new(apic_ptr.cast().as_mut()));
+    APIC = Some(Spinlock::new(&mut *apic_ptr.cast().as_ptr()));
 
     let mut apic = get_apic().lock();
     APIC_EOI = apic.register_as_mut_ptr::<apic::reg::EndOfInterrupt>();
