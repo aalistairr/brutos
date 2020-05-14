@@ -1,0 +1,22 @@
+Kernel features:
+- x86-64 support
+- Memory subsystem
+  * Physical allocator
+  * MMU support
+  * Address spaces
+  * Slab allocator
+- Tasks (kernel- and userspace)
+- Synchronization primitives
+  * Mutex
+  * Condvar
+  * MPSC channel
+- Rudimentary scheduler
+
+Build requirements:
+rust nightly
+xargo (`cargo install xargo`)
+xorriso
+qemu
+
+Build and run:
+`make qemu`
